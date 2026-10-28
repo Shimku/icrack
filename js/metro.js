@@ -6,7 +6,8 @@ const { clamp, fmt } = IC;
 const ctx = IC.ctx;
 const VMAX = 30, ACC = 11, BRAKE = 24;
 const TAP_V = 6;          // a go that never got faster than this was just a tap
-const NAMES = ['Home Bar', 'Hinge', 'Genius Bar', 'Infinite Loop', 'JerryRigEverything'];
+const NAMES = IC.APP ? ['Home Bar', 'Hinge', 'Repair Shop', 'Dead Pixel', 'Edge']
+  : ['Home Bar', 'Hinge', 'Genius Bar', 'Infinite Loop', 'JerryRigEverything'];
 const ROUTE = [1, 2, 3, 4, 3, 2, 1, 0];
 
 let M = null;     // line layout: stations, train size
@@ -23,7 +24,8 @@ function layout() {
   const st = NAMES.map((name, i) => ({ name, s: lo + ((hi - lo) * i) / 4, len: plat, wait: 2 + ((i * 7) % 4) }));
   // keep platforms off the corner, then push apart any that now overlap
   const zLo = L.LB - 2 - plat / 2, zHi = L.LB + 2 + plat / 2, room = plat + 1.5;
-  const off = (c, up) => (c > zLo && c < zHi ? (up ? zHi : zLo) : c);
+  // (with a little give, so a platform pushed exactly to the edge of the zone stays put)
+  const off = (c, up) => (c > zLo + 1e-6 && c < zHi - 1e-6 ? (up ? zHi : zLo) : c);
   for (const p of st) p.s = off(p.s, p.s >= L.LB);
   for (let i = 1; i < st.length; i++) st[i].s = off(Math.max(st[i].s, st[i - 1].s + room), true);
   st[st.length - 1].s = Math.min(st[st.length - 1].s, hi);
@@ -50,6 +52,7 @@ function miss(st, name) {
   st.results.push('miss');
   st.missed++;
   st.popup = { text: name, t: 1.6, good: false };
+  IC.haptic('fail');
   IC.tone(300, 200, 0.25, 'square', 0.03);
 }
 
@@ -66,6 +69,7 @@ function arrive(st) {
   st.phase = 'doors'; st.phaseT = 0;
   // waiting passengers head for the doors
   st.boarding = Array.from({ length: tg.wait }, (_, i) => ({ off: (i - (tg.wait - 1) / 2) * 1.6, t: Math.random() * 0.2 }));
+  IC.haptic(pts === 100 ? 'success' : 'medium');
   IC.tone(659, 659, 0.22, 'sine', 0.05); IC.tone(523, 523, 0.3, 'sine', 0.05, 0.22);
   IC.hum.set(60, 0);
   return true;
@@ -108,7 +112,7 @@ function step(st, dt) {
   // the buffers at either end
   if (st.s > M.hi || st.s < M.lo) {
     st.s = clamp(st.s, M.lo, M.hi);
-    if (st.v > 3) { st.phase = 'crash'; st.crashed = true; IC.noise(0.5, 0.08, 400); IC.tone(150, 40, 0.5, 'sawtooth', 0.05); IC.hum.set(50, 0); return; }
+    if (st.v > 3) { st.phase = 'crash'; st.crashed = true; IC.haptic('heavy'); IC.noise(0.5, 0.08, 400); IC.tone(150, 40, 0.5, 'sawtooth', 0.05); IC.hum.set(50, 0); return; }
     st.v = 0;
   }
   if (st.mode !== 'rest' && st.v === 0 && !(st.mode === 'power' && holding)) {
@@ -283,7 +287,7 @@ function selftest(n) {
   IC.silent = true;
   for (let i = 0; i < n; i++) {
     const st = drive(bot);
-    if (st.phase !== 'done') problems.push(`run ${i} ended ${st.phase}`);
+    if (st.phase !== 'done') problems.push(`run ${i} ended ${st.phase} going to ${target(st).name} at ${st.s.toFixed(1)}`);
     if (st.missed) problems.push(`bot missed ${st.missed}`);
     scores.push(st.score);
   }
@@ -309,7 +313,7 @@ function selftest(n) {
   // platforms must not overlap each other or the corner, and fit on the line
   for (let i = 1; i < M.st.length; i++) if (M.st[i].s - M.st[i].len / 2 < M.st[i - 1].s + M.st[i - 1].len / 2 + 1) problems.push(`platforms ${i - 1}/${i} overlap`);
   for (const p of M.st) if (p.s - p.len / 2 < L0.lo - 0.01 || p.s + p.len / 2 > L0.hi + 0.01) problems.push(`${p.name} is off the line`);
-  for (const p of M.st) if (p.s + p.len / 2 > IC.Lo.LB - 2 && p.s - p.len / 2 < IC.Lo.LB + 2) problems.push(`${p.name} is on the corner`);
+  for (const p of M.st) if (p.s + p.len / 2 > IC.Lo.LB - 2 + 1e-6 && p.s - p.len / 2 < IC.Lo.LB + 2 - 1e-6) problems.push(`${p.name} is on the corner`);
   const legs = M.st.slice(1).map((p, i) => +(p.s - M.st[i].s).toFixed(1));
   return { runs: n, botScore: scores[0], nervousScore: nervous.score, nudgeScore: nudger.score, nudgeMissed: nudger.missed, maxPossible: ROUTE.length * 100, train: +M.train.toFixed(1), platform: +M.plat.toFixed(1), slack: +M.slack.toFixed(2), legs, problems };
 }
@@ -374,7 +378,7 @@ IC.register({
     const nxt = S.k < ROUTE.length ? target(S).name : '';
     return { main: `${fmt(S.score)} pts`, sub: `Stop ${Math.min(S.k + 1, ROUTE.length)} of ${ROUTE.length}${nxt ? `: ${nxt}` : ''}` };
   },
-  share: (r) => `I drove the Green Line on my Duo's screen and scored ${fmt(r.score)}.`,
+  share: (r) => `I drove the Green Line on my ${IC.APP ? 'phone' : 'Duo'}'s screen and scored ${fmt(r.score)}.`,
   selftest,
 });
 })();

@@ -19,7 +19,12 @@ IC.SELFTEST = hook('selftest');          // headless fairness and logic tests
 IC.SIM = hook('sim');                    // play N seconds on autopilot, then freeze
 IC.BOT = (LOCAL && params.has('bot')) || !!IC.SELFTEST;
 IC.TEST = !!(IC.SHOT || IC.SELFTEST || IC.SIM);
-IC.FRAMED = params.has('frame') ? params.get('frame') !== '0'
+// The App Store build. Its wrapper sets ICRACK_APP before any script runs;
+// ?app previews it here. No Apple names, no device frame, its own menu.
+const NATIVE = window.ICRACK_APP || null;
+IC.APP = !!NATIVE || hook('app') != null;
+const post = (name, body) => { try { window.webkit.messageHandlers[name].postMessage(body); } catch (e) { /* not in the app */ } };
+IC.FRAMED = IC.APP ? false : params.has('frame') ? params.get('frame') !== '0'
   : IC.SHOT === 'og' ? true : IC.SHOT === 'icon' ? false
   : !matchMedia('(any-pointer: coarse)').matches;      // desktop: draw a Duo round the game
 
@@ -84,17 +89,29 @@ const STORE_KEY = 'icrack.v1';
 const store = (() => {
   if (IC.TEST) return { best: {} };
   let s = {};
-  try { s = JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { /* private mode */ }
+  // the app keeps its copy natively, since iOS may clear a web view's storage
+  try { s = JSON.parse((NATIVE && NATIVE.store) || localStorage.getItem(STORE_KEY)) || {}; } catch (e) { /* private mode */ }
   if (typeof s.best !== 'object' || s.best === null) s.best = typeof s.best === 'number' ? { walk: s.best } : {};
   return s;
 })();
 function save() {
   if (IC.TEST) return;
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) { /* private mode */ }
+  const json = JSON.stringify(store);
+  if (NATIVE) post('store', json);
+  try { localStorage.setItem(STORE_KEY, json); } catch (e) { /* private mode */ }
 }
 IC.store = store;
 IC.save = save;
 IC.best = (id) => store.best[id] || 0;
+// Taps from the phone's motor, in the app only: 'light' | 'medium' | 'heavy' | 'select' | 'success' | 'fail'.
+let hapticAt = -1;
+IC.haptic = (kind, soft) => {
+  if (!NATIVE || IC.silent || store.noHaptics) return;
+  // soft: skip it if the game has just given one (a crash, then the run ending)
+  if (soft && IC.clock - hapticAt < 0.15) return;
+  hapticAt = IC.clock;
+  post('haptic', kind);
+};
 
 // In a Safari tab on the unfolded Duo the toolbars sit across the top and push
 // the page down, so the default is moved up to land on the panel's real line.
@@ -137,6 +154,7 @@ function layout() {
   canvas.width = Math.round(IC.W * IC.DPR);
   canvas.height = Math.round(IC.H * IC.DPR);
   document.body.classList.toggle('bleed', !IC.FRAMED);
+  document.body.classList.toggle('native', IC.APP);
   readSafe();
   geometry();
   buildWallpaper();
@@ -154,7 +172,7 @@ function geometry() {
   const orient = sw >= sh ? 'landscape' : 'portrait';
   const cal = calFor(orient);
   let U = Math.min(sw, sh) / 100;
-  if (IC.SHOT === 'icon') { Object.assign(cal, { jx: 0.3, jy: 0.62 }); U *= 2.4; }
+  if (IC.SHOT === 'icon') { Object.assign(cal, IC.APP ? { jx: 0.2, jy: 0.66 } : { jx: 0.3, jy: 0.62 }); U *= IC.APP ? 3.4 : 2.4; }
   const { A, B } = ROTS[cal.rot & 3];
   const J = [sx + cal.jx * sw, sy + cal.jy * sh];
   const reach = (d) => (d[0] > 0 ? sx + sw - J[0] : d[0] < 0 ? J[0] - sx : d[1] > 0 ? sy + sh - J[1] : J[1] - sy);
@@ -305,7 +323,48 @@ IC.hum = (() => {
 })();
 
 // ---------- static layers ----------
+// The app's background is the panel itself: black, with its subpixels catching
+// the line's light. It is rebuilt whenever the line moves.
+let wallKey = '';
+const panelKey = () => `${IC.Lo.J[0].toFixed(1)},${IC.Lo.J[1].toFixed(1)},${IC.Lo.cal.rot},${IC.Lo.cal.double}`;
+function buildPanel() {
+  // sized off the screen, not L.U, so a zoomed-in shot keeps real-looking pixels
+  const L = IC.Lo, D = IC.DPR, U = Math.min(L.sw, L.sh) / 100;
+  wallKey = panelKey();
+  wall = makeCanvas(L.sw, L.sh);
+  const g = wall.getContext('2d');
+  g.fillStyle = '#060707';
+  g.fillRect(0, 0, wall.width, wall.height);
+  // one pixel, drawn in device pixels: a red, a green and a blue stripe
+  const px = Math.max(3, Math.round((U * 0.8 * D) / 3) * 3), third = px / 3, gap = Math.max(1, Math.round(px * 0.1));
+  const tile = document.createElement('canvas');
+  tile.width = tile.height = px;
+  const t = tile.getContext('2d');
+  ['#ff4436', '#3dff78', '#4a72ff'].forEach((c, i) => { t.fillStyle = c; t.fillRect(i * third + gap / 2, gap / 2, third - gap, px - gap); });
+  const lit = makeCanvas(L.sw, L.sh), lg = lit.getContext('2d');
+  lg.fillStyle = lg.createPattern(tile, 'repeat');
+  lg.fillRect(0, 0, lit.width, lit.height);
+  // how lit each pixel is: a faint floor, then more the closer it is to the line
+  const mask = makeCanvas(L.sw, L.sh), mg = mask.getContext('2d');
+  mg.scale(D, D);
+  mg.translate(-L.sx, -L.sy);
+  mg.fillStyle = 'rgba(0,0,0,0.05)';
+  mg.fillRect(L.sx, L.sy, L.sw, L.sh);
+  const ox = L.B[0] * L.dbl * L.U, oy = L.B[1] * L.dbl * L.U;
+  mg.lineCap = 'round'; mg.lineJoin = 'round';
+  for (const [wd, al] of [[60, 0.03], [36, 0.04], [20, 0.06], [11, 0.08], [5, 0.12], [2.2, 0.16]]) {
+    mg.beginPath();
+    mg.moveTo(L.bEnd[0], L.bEnd[1]); mg.lineTo(L.J[0], L.J[1]); mg.lineTo(L.aEnd[0], L.aEnd[1]);
+    if (L.cal.double) { mg.moveTo(L.J[0] + ox, L.J[1] + oy); mg.lineTo(L.aEnd[0] + ox, L.aEnd[1] + oy); }
+    mg.lineWidth = wd * U; mg.strokeStyle = `rgba(0,0,0,${al})`; mg.stroke();
+  }
+  lg.globalCompositeOperation = 'destination-in';
+  lg.drawImage(mask, 0, 0);
+  g.drawImage(lit, 0, 0);
+}
+
 function buildWallpaper() {
+  if (IC.APP) { buildPanel(); return; }
   const { sw: w, sh: h } = IC.Lo;
   wall = makeCanvas(w, h);
   const g = wall.getContext('2d');
@@ -712,6 +771,7 @@ IC.end = (r) => {
   const key = bestKey(g), prev = IC.best(key);
   r.newBest = r.score > 0 && (!prev || (lowWins ? r.score < prev : r.score > prev));
   if (r.newBest) { store.best[key] = r.score; save(); }
+  IC.haptic(r.newBest ? 'success' : 'heavy', true);
   result = r;
   IC.hum.stop();
   if (IC.SELFTEST) return;
@@ -758,17 +818,20 @@ function showSettings() {
   setState('settings');
   showPanel('<button class="info" data-act="info" aria-label="About">i</button><h2>Settings</h2>'
     + `<div class="row">${IC.FRAMED ? '' : '<button data-act="calib">I have the real line</button>'}`
-    + `<button data-act="sound">Sound: ${store.muted ? 'off' : 'on'}</button></div>`
+    + `<button data-act="sound">Sound: ${store.muted ? 'off' : 'on'}</button>`
+    + (IC.APP ? `<button data-act="haptics">Haptics: ${store.noHaptics ? 'off' : 'on'}</button>` : '') + '</div>'
     + (IC.canInstall() ? '<div class="row"><button data-act="install">Add to Home Screen</button></div>' : '')
-    + `<p class="fine">${IC.FRAMED ? 'Got a Duo with the line? Open this page on it and line the game up.' : 'Got a Duo with the line? You can line the game up with it.'}</p>`
+    + `<p class="fine">${IC.APP ? 'Got a real green line on your screen? You can line the game up with it.'
+      : IC.FRAMED ? 'Got a Duo with the line? Open this page on it and line the game up.' : 'Got a Duo with the line? You can line the game up with it.'}</p>`
     + '<div class="row"><button class="solid" data-act="done">Done</button></div>');
 }
 
 function showInfo() {
   setState('info');
   showPanel('<h2>About</h2>'
-    + '<p class="note">Btw, I love Apple but this had to be done.</p>'
-    + '<p class="legal">Not affiliated with Apple, iFixit or JerryRigEverything. Apple says it is "aware of an issue impacting the inner display on a small number of iPhone Duo units."</p>'
+    + (IC.APP ? '<p class="note">Made by Nikita Shimkus.</p>'
+      : '<p class="note">Btw, I love Apple but this had to be done.</p>'
+      + '<p class="legal">Not affiliated with Apple, iFixit or JerryRigEverything. Apple says it is "aware of an issue impacting the inner display on a small number of iPhone Duo units."</p>')
     + '<div class="row"><a class="link x" href="https://x.com/nikitashimkus" target="_blank" rel="noopener" aria-label="Nikita on X"><svg viewBox="0 0 1200 1227" aria-hidden="true"><path fill="currentColor" d="M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.163 519.284ZM569.165 687.828L521.697 619.934L144.011 79.6944H306.615L611.412 515.685L658.88 583.579L1055.08 1150.3H892.476L569.165 687.828Z"/></svg></a>'
     + '<button class="solid" data-act="back">Back</button></div>');
 }
@@ -779,7 +842,7 @@ function showInfo() {
 const STANDALONE = navigator.standalone === true || matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
 const IOS_TAB = hook('install') === 'ios' || ('standalone' in navigator && !navigator.standalone);
 let installEvt = null, installFrom = 'hub';
-IC.canInstall = () => !IC.SHOT && !IC.SELFTEST && !IC.FRAMED && !STANDALONE && (IOS_TAB || !!installEvt);
+IC.canInstall = () => !IC.APP && !IC.SHOT && !IC.SELFTEST && !IC.FRAMED && !STANDALONE && (IOS_TAB || !!installEvt);
 function refreshInstall() {
   const on = IC.canInstall();
   $('b-install').classList.toggle('hidden', !on);
@@ -825,6 +888,7 @@ card.addEventListener('click', (e) => {
   if (act === 'again') IC.play();
   else if (act === 'share') share(b);
   else if (act === 'sound') { store.muted = !store.muted; save(); if (store.muted) IC.hum.stop(); else unlockAudio(); b.textContent = `Sound: ${store.muted ? 'off' : 'on'}`; }
+  else if (act === 'haptics') { store.noHaptics = !store.noHaptics; save(); IC.haptic('select'); b.textContent = `Haptics: ${store.noHaptics ? 'off' : 'on'}`; }
   else if (act === 'calib') showCalib();
   else if (act === 'info') showInfo();
   else if (act === 'opt' && IC.game && IC.game.option) { IC.game.option(b.dataset.v); showTitle(); }
@@ -946,8 +1010,145 @@ function settingsIcon(g, s) {
   g.beginPath(); g.moveTo(0, s * 0.08); g.lineTo(s * 0.5, s * 0.08); g.moveTo(0, s * 0.08); g.lineTo(0, s * 0.5); g.stroke();
 }
 
+// ---------- the app's menu: a test card ----------
+// One colour bar per game, in test-card order, Settings last. Under each bar is
+// its castellation, the strip of reversed colours a real card has.
+const BARS = [
+  { c: '#c6c6c6', ink: '#121212', cast: '#1414c6' },
+  { c: '#c6c600', ink: '#121212', cast: '#121212' },
+  { c: '#00c6c6', ink: '#121212', cast: '#c600c6' },
+  { c: '#00c600', ink: '#121212', cast: '#121212' },
+  { c: '#c600c6', ink: '#ffffff', cast: '#00c6c6' },
+  { c: '#c60000', ink: '#ffffff', cast: '#121212' },
+  { c: '#1414c6', ink: '#ffffff', cast: '#c6c6c6' },
+];
+// Flat pictograms on a unit square, all in one stroke weight.
+const GLYPHS = {
+  blocks(g) {
+    for (const [x, y] of [[0.22, 0.06], [0.22, 0.36], [0.22, 0.66], [0.52, 0.66]]) { rrect(g, x, y, 0.27, 0.27, 0.05); g.fill(); }
+  },
+  walk(g, paper) {
+    const P = GRAIN.map(([a, k]) => [0.5 + Math.cos(a) * 0.34 * k, 0.4 + Math.sin(a) * 0.3 * k]);
+    g.beginPath(); P.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.closePath();
+    g.lineJoin = 'round'; g.lineWidth = 0.06; g.fill(); g.stroke();
+    g.beginPath(); g.moveTo(0.4, 0.68); g.lineTo(0.38, 0.92); g.moveTo(0.6, 0.68); g.lineTo(0.62, 0.92); g.stroke();
+    g.fillStyle = paper;
+    for (const x of [0.46, 0.64]) { g.beginPath(); g.ellipse(x, 0.38, 0.045, 0.065, 0, 0, Math.PI * 2); g.fill(); }
+  },
+  hangman(g) {
+    g.beginPath();
+    g.moveTo(0.1, 0.93); g.lineTo(0.56, 0.93); g.moveTo(0.22, 0.93); g.lineTo(0.22, 0.07); g.lineTo(0.68, 0.07); g.lineTo(0.68, 0.22);
+    g.moveTo(0.68, 0.43); g.lineTo(0.68, 0.66); g.moveTo(0.56, 0.56); g.lineTo(0.68, 0.49); g.lineTo(0.8, 0.56);
+    g.moveTo(0.6, 0.86); g.lineTo(0.68, 0.66); g.lineTo(0.76, 0.86);
+    g.stroke();
+    g.beginPath(); g.arc(0.68, 0.325, 0.1, 0, Math.PI * 2); g.stroke();
+  },
+  pinball(g) {
+    g.beginPath(); g.arc(0.5, 0.27, 0.12, 0, Math.PI * 2); g.fill();
+    g.lineWidth = 0.13;
+    g.beginPath(); g.moveTo(0.12, 0.6); g.lineTo(0.42, 0.78); g.moveTo(0.88, 0.6); g.lineTo(0.58, 0.78); g.stroke();
+  },
+  metro(g) {
+    rrect(g, 0.08, 0.2, 0.84, 0.5, 0.12); g.stroke();
+    for (const x of [0.19, 0.41, 0.63]) { rrect(g, x, 0.31, 0.18, 0.17, 0.03); g.fill(); }
+    for (const x of [0.29, 0.71]) { g.beginPath(); g.arc(x, 0.79, 0.075, 0, Math.PI * 2); g.fill(); }
+    g.lineWidth = 0.05; g.beginPath(); g.moveTo(0.02, 0.92); g.lineTo(0.98, 0.92); g.stroke();
+  },
+  buzz(g) {
+    g.beginPath(); g.moveTo(0.03, 0.66); g.lineTo(0.22, 0.66); g.lineTo(0.34, 0.36); g.lineTo(0.62, 0.36); g.lineTo(0.74, 0.66); g.lineTo(0.97, 0.66); g.stroke();
+    g.beginPath(); g.ellipse(0.48, 0.36, 0.1, 0.16, 0, 0, Math.PI * 2); g.stroke();
+    g.lineWidth = 0.1; g.beginPath(); g.moveTo(0.53, 0.52); g.lineTo(0.66, 0.9); g.stroke();
+  },
+  settings(g, paper) {
+    g.beginPath();
+    for (let i = 0; i < 32; i++) { const a = (i / 32) * Math.PI * 2, r = i % 4 < 2 ? 0.46 : 0.36; g.lineTo(0.5 + Math.cos(a + 0.1) * r, 0.5 + Math.sin(a + 0.1) * r); }
+    g.closePath(); g.fill();
+    g.fillStyle = paper; g.beginPath(); g.arc(0.5, 0.5, 0.15, 0, Math.PI * 2); g.fill();
+  },
+};
+const bars = $('bars');
+let barsPx = 0;
+function buildBars(gs) {
+  if (gs === barsPx) return;
+  barsPx = gs;
+  bars.innerHTML = '';
+  IC.games.concat([{ id: 'settings', name: 'Settings' }]).forEach((g, i) => {
+    const k = BARS[i % BARS.length];
+    const c = makeCanvas(gs, gs), x = c.getContext('2d');
+    x.scale(IC.DPR * gs, IC.DPR * gs);
+    x.fillStyle = x.strokeStyle = k.ink;
+    x.lineWidth = 0.09; x.lineCap = 'round'; x.lineJoin = 'round';
+    if (GLYPHS[g.id]) GLYPHS[g.id](x, k.c);
+    const b = document.createElement('button');
+    b.className = 'bar';
+    b.dataset.id = g.id;
+    b.style.cssText = `--c:${k.c};--ink:${k.ink};--cast:${k.cast}`;
+    const img = new Image();
+    img.src = c.toDataURL();
+    img.alt = '';
+    const t = document.createElement('span');
+    t.className = 't';
+    const name = document.createElement('b');
+    name.textContent = g.name;
+    const best = document.createElement('small');
+    t.append(name, best);
+    b.append(img, t);
+    bars.append(b);
+  });
+}
+function placeBars() {
+  const L = IC.Lo, U = L.U, n = IC.games.length + 1;
+  // the free band that fits seven bars best
+  // the Duo's camera is a hole in the screen that iOS doesn't count as unsafe
+  // (an iPhone with an island reports an inset on one side or another)
+  const cam = Math.max(safe.t, safe.l, safe.r) < 24 ? L.sy + L.sh * 0.11 : 0;
+  let best = null;
+  for (const r0 of IC.freeRects()) {
+    const r = Object.assign({}, r0);
+    if (r.side === 'top') {
+      const y = Math.max(r.y, cam);
+      Object.assign(r, { y, h: r.h - (y - r.y) - 8 * U });  // and Speck walks under it
+    }
+    // how close each bar comes to a comfortable size: 120 x 160 standing, 300 x 56 lying down
+    const fitC = Math.min(r.w / n / 120, r.h / 160, 1.6) * (r.w / n >= 88 ? 1.1 : 0.3);
+    const fitR = Math.min(r.w / 300, r.h / n / 56, 1.6) * (r.h / n >= 34 ? 1 : 0.3);
+    const cols = fitC >= fitR, score = Math.max(fitC, fitR);
+    if (!best || score > best.score) best = { r, cols, score };
+  }
+  if (!best) return;
+  const { r, cols } = best;
+  const bw = cols ? r.w / n : r.w, bh = cols ? r.h : r.h / n;
+  const gs = Math.round(clamp(cols ? Math.min(bw * 0.34, bh * 0.28) : bh * 0.5, 18, 64));
+  const fs = clamp(cols ? bw * 0.125 : bh * 0.3, 12, 22), cs = clamp((cols ? bh : bw) * (cols ? 0.1 : 0.06), 7, 26);
+  buildBars(gs);
+  bars.className = cols ? 'cols' : 'rows';
+  Object.assign(bars.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` });
+  bars.style.setProperty('--gs', `${gs}px`);
+  bars.style.setProperty('--fs', `${fs}px`);
+  bars.style.setProperty('--cs', `${cs}px`);
+  const p = clamp(fs * 0.75, 8, 16);
+  for (const b of bars.children) {
+    b.style.padding = cols ? `${p}px ${p}px ${cs + p}px` : `0 ${cs + p}px 0 ${p}px`;
+    const g = IC.byId[b.dataset.id];
+    b.querySelector('small').textContent = g ? bestText(g, IC.best(bestKey(g))) : '';
+  }
+  placeBrand(r);
+}
+bars.addEventListener('click', (e) => {
+  const b = e.target.closest('.bar');
+  if (!b) return;
+  b.blur();
+  unlockAudio();
+  IC.haptic('select');
+  if (b.dataset.id === 'settings') showSettings();
+  else IC.open(b.dataset.id);
+});
+
 function placeHub() {
   const L = IC.Lo, n = IC.games.length + 1;
+  apps.classList.toggle('hidden', IC.APP);
+  bars.classList.toggle('hidden', !IC.APP);
+  if (IC.APP) { placeBars(); return; }
   // leave Speck room to walk the line under the icons
   // and keep the top row clear of the camera hole in the top corner
   const cam = L.sy + L.sh * 0.11;
@@ -977,8 +1178,12 @@ function placeHub() {
     gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
   });
   apps.style.setProperty('--icon', `${size}px`);
-  // the leftover corner: the area left of the hinge line and below the band, in the usual layout
-  const j = L.J, e = IC.FRAMED ? { t: 0, r: 0, b: 0, l: 0 } : safe;
+  placeBrand(r);
+}
+
+// The name goes in the leftover corner: left of the hinge line and below the band, in the usual layout.
+function placeBrand(r) {
+  const L = IC.Lo, j = L.J, e = IC.FRAMED ? { t: 0, r: 0, b: 0, l: 0 } : safe;
   const corners = [
     { x: L.sx + e.l, y: j[1], w: j[0] - L.sx - e.l, h: L.sy + L.sh - e.b - j[1] },
     { x: j[0], y: j[1], w: L.sx + L.sw - e.r - j[0], h: L.sy + L.sh - e.b - j[1] },
@@ -994,7 +1199,7 @@ function placeHub() {
   brand.classList.toggle('hidden', !c);
   if (c) {
     Object.assign(brand.style, { left: `${c.x}px`, top: `${c.y}px`, width: `${c.w}px`, height: `${c.h}px` });
-    brand.style.setProperty('--k', clamp(Math.min(c.w / 340, c.h / 170), 0.6, 1.4));
+    brand.style.setProperty('--k', clamp(Math.min(c.w / (IC.APP ? 270 : 340), c.h / 170), 0.6, 1.4));
   }
 }
 
@@ -1019,7 +1224,7 @@ function prepareShare() {
   x.scale(IC.DPR, IC.DPR);
   const f = (g.panelRect && g.panelRect('over')) || IC.freeRect();
   const k = clamp(Math.min(f.w / 380, f.h / 270), 0.7, 1.5), cx = f.x + f.w / 2, cy = f.y + f.h / 2;
-  x.fillStyle = 'rgba(18,16,40,0.55)';
+  x.fillStyle = IC.APP ? 'rgba(14,15,16,0.72)' : 'rgba(18,16,40,0.55)';
   rrect(x, cx - 170 * k, cy - 92 * k, 340 * k, 184 * k, 22 * k);
   x.fill();
   x.textAlign = 'center';
@@ -1036,11 +1241,13 @@ function prepareShare() {
   x.font = `600 ${13 * k}px ${FONT}`;
   x.globalAlpha = 0.7;
   x.fillText(shareUrl().replace(/^https?:\/\//, '').replace(/\/\?g=.*$/, ''), cx, cy + 56 * k);
+  if (NATIVE) { shareFile = c.toDataURL('image/png'); return; }
   c.toBlob((b) => { if (b) shareFile = new File([b], 'icrack.png', { type: 'image/png' }); }, 'image/png');
 }
 async function share(btn) {
   const g = IC.game, r = result, url = shareUrl();
   const text = g.share ? g.share(r) : `I scored ${fmt(r.score)} in ${g.name}.`;
+  if (NATIVE) { post('share', { text, url, image: shareFile || '' }); return; }
   try {
     if (shareFile && navigator.canShare && navigator.canShare({ files: [shareFile] })) {
       await navigator.share({ files: [shareFile], text: `${text} ${url}` });
@@ -1126,8 +1333,7 @@ const payUrl = hook('pay') ? 'https://example.com/' : PAY_URL;
 const LINES = [
   'Give me $1,000 instead.',
   'iCrack or Green Line of Death?',
-  'Makes you miss the Bendgate.',
-];
+].concat(IC.APP ? [] : ['Makes you miss the Bendgate.']);
 const SAY_T = 4;
 const idle = { s: 0, dir: 1, h: 0, vh: 0, pause: 1, walk: 0, say: 0, line: -1, bag: [] };
 function nextLine() {
@@ -1241,6 +1447,7 @@ function render() {
     const [x, y, a] = at(IC.calSpeck || L.LB + 4, 0);
     IC.drawSpeck(x, y, a + Math.PI / 2, L.faceSign, {});
   } else {
+    if (IC.APP && wallKey !== panelKey()) buildPanel();
     ctx.drawImage(wall, L.sx, L.sy, L.sw, L.sh);
     if (IC.game) IC.game.render();
     else {

@@ -42,6 +42,7 @@ function holeAt(st, s, tol) {
 function jump(st) {
   const sp = st.sp;
   sp.grounded = false; sp.vh = VJ; sp.buffer = 0; sp.overHole = 0; sp.squash = -0.7;
+  IC.haptic('light');
   IC.tone(420, 780, 0.09, 'square', 0.03);
 }
 
@@ -50,6 +51,7 @@ function bounce(st, h) {
   sp.h = h; sp.squash = 0.6;
   sp.vh = sp.buffer > 0 ? VJ : VJ * 0.72;       // a tap just before landing gets the full jump
   sp.buffer = 0;
+  IC.haptic('medium');
   IC.tone(300, 900, 0.12, 'triangle', 0.04);
 }
 
@@ -150,11 +152,12 @@ function collide(st, dt) {
 function grab(st, z) {
   z.gone = true;
   st.kit = 1; st.kits++;
-  st.popup = { text: 'iFixit kit', t: 1.2, good: true };
+  st.popup = { text: IC.APP ? 'Repair kit' : 'iFixit kit', t: 1.2, good: true };
   if (!IC.silent) {
     const p = IC.at(z.s, z.h + z.r);
     IC.burst(p[0], p[1], 10, ['#3d9bff', '#ffffff', '#9fd0ff'], 14, [0.3, 0.7], 0.5);
   }
+  IC.haptic('success');
   IC.tone(660, 990, 0.08, 'triangle', 0.04);
   IC.tone(990, 1480, 0.12, 'triangle', 0.035, 0.07);
 }
@@ -174,6 +177,7 @@ function fix(st, thing) {
     thing.state = 'done';
     fxSparks(thing);
   }
+  IC.haptic('medium');
   IC.tone(520, 1040, 0.1, 'square', 0.03);
   IC.tone(780, 1560, 0.14, 'triangle', 0.04, 0.08);
 }
@@ -203,7 +207,8 @@ function trySpawn(st) {
 function spawnBill(st) {
   const L = IC.Lo, sp = st.sp, w = 9;
   const bills = st.hz.filter((z) => z.kind === 'bill' && live(z));
-  if (bills.length >= (st.t > 40 ? 3 : 2)) return false;
+  // a third bill only once he's warmed up, and only on a line long enough to dodge three
+  if (bills.length >= (st.t > 40 && L.total >= 170 ? 3 : 2)) return false;
   const fromA = sp.dir < 0;                          // the end he's walking away from
   const s = fromA ? L.total + w / 2 : -w / 2;
   if (Math.abs(sp.s - s) < 30 || bills.some((z) => Math.abs(z.s - s) < 32)) return false;
@@ -457,15 +462,17 @@ function avoidable(snapJSON, deathT) {
   for (const a of slots) tries.push([a]);
   for (const a of slots) for (const b of slots) if (b >= a + 24) tries.push([a, b]);
   const horizon = n + Math.round(0.5 / STEP);
-  for (const taps of tries) {
+  const lives = (taps) => {
     const st = JSON.parse(snapJSON);
-    let ok = true;
     for (let i = 0; i < horizon; i++) {
       step(st, STEP, taps.includes(i));
-      if (st.dead) { ok = false; break; }
+      if (st.dead) return false;
     }
-    if (ok) return true;
-  }
+    return true;
+  };
+  if (tries.some(lives)) return true;
+  // late in a run it can take three: a bill, a hole, then the next bill
+  for (const a of slots) for (const b of slots) for (const c of slots) if (b >= a + 24 && c >= b + 24 && lives([a, b, c])) return true;
   return false;
 }
 
@@ -491,7 +498,12 @@ function selftest(n) {
       const want = st.t - 1.2;
       let snap = snaps[0];
       for (const s of snaps) if (JSON.parse(s).t <= want) snap = s;
-      if (!avoidable(snap, st.t)) unfair.push({ run: i, t: +st.t.toFixed(2), kind, s: +st.sp.s.toFixed(1) });
+      if (!avoidable(snap, st.t)) {
+        const w = JSON.parse(snap), f = (x) => +x.toFixed(1);
+        unfair.push({ run: i, t: +st.t.toFixed(2), kind, s: f(st.sp.s),
+          from: { t: f(w.t), s: f(w.sp.s), dir: w.sp.dir, h: f(w.sp.h), ends: [f(ends().lo), f(ends().hi)],
+            hz: w.hz.filter(live).map((z) => [z.kind, f(z.s), z.dir, f(z.h)]), gaps: w.gaps.map((g) => [f(g.s0), f(g.len), g.state, f(g.t)]) } });
+      }
     }
     runs.push(+st.t.toFixed(1));
   }

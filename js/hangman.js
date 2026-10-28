@@ -114,6 +114,77 @@ const WORDS = [
   ['JAILBREAK', 'Freed the iPhone, voided the warranty'],
   ['CALIFORNIA', 'Designed by Apple in'],
 ];
+// The App Store build leaves out Apple's names, products and people,
+// rewords hints that mention them, and has its own words instead.
+const WEB_ONLY = new Set([
+  'APPLECARE', 'GENIUS BAR', 'IFIXIT', 'JERRYRIG', 'CUPERTINO', 'INFINITE LOOP', 'APPLE PARK', 'STEVE JOBS',
+  'WOZNIAK', 'TIM COOK', 'MACINTOSH', 'LIGHTNING', 'MAGSAFE', 'AIRPODS', 'APPLE WATCH', 'VISION PRO', 'MACBOOK',
+  'SIRI', 'ICLOUD', 'APP STORE', 'ITUNES', 'IPOD', 'CLICK WHEEL', 'RETINA', 'ACTION BUTTON', 'CAMERA CONTROL',
+  'FACETIME', 'IMESSAGE', 'GREEN BUBBLE', 'BATTERYGATE', 'ANTENNAGATE', 'BENDGATE', 'TOUCH BAR', 'BUTTERFLY KEYS',
+  'CHEESE GRATER', 'THINK DIFFERENT', 'SHOT ON IPHONE', 'SLIDE TO UNLOCK', 'MAGIC MOUSE', 'APPLE PENCIL',
+  'FINEWOVEN', 'WWDC', 'CALIFORNIA', 'DYNAMIC ISLAND', 'LIQUID GLASS', 'FACE ID', 'AIRDROP', 'FIND MY', 'KEYNOTE',
+]);
+const APP_HINTS = {
+  'SMALL NUMBER': 'How many units, they said',
+  'LOCK SCREEN': 'Swipe up to get past it',
+  'NOTCH': 'The black bit at the top',
+  'RIGHT TO REPAIR': 'What repair shops keep asking for',
+  'JAILBREAK': 'Voids the warranty',
+  'SERIAL NUMBER': 'Printed on the box',
+};
+const APP_WORDS = [
+  ['CRACKED SCREEN', 'Spiderweb in one corner'],
+  ['TEMPERED GLASS', 'Breaks so the screen does not'],
+  ['STUCK PIXEL', 'Always on, always green'],
+  ['SUBPIXEL', 'Red, green or blue'],
+  ['BURN IN', 'The keyboard, forever, faintly'],
+  ['GHOST TOUCH', 'Taps nobody made'],
+  ['BACKLIGHT', 'Behind the pixels'],
+  ['REFRESH RATE', 'A hundred and twenty times a second'],
+  ['DIGITIZER', 'The part that feels your finger'],
+  ['RIBBON CABLE', 'Usually the culprit'],
+  ['LOGIC BOARD', 'Where the chips live'],
+  ['ADHESIVE', 'Heat it up first'],
+  ['HEAT GUN', 'Softens the glue'],
+  ['SUCTION CUP', 'Lifts the screen off'],
+  ['TWEEZERS', 'For the tiny screws'],
+  ['SCREWDRIVER', 'Comes in the kit'],
+  ['SPARE PARTS', 'In a drawer somewhere'],
+  ['REPAIR SHOP', 'Closed on Sundays'],
+  ['TECHNICIAN', 'Has seen worse'],
+  ['OUT OF WARRANTY', 'Last thing you want to hear'],
+  ['FINE PRINT', 'Read it this time'],
+  ['RETURN POLICY', 'Fourteen days, no questions'],
+  ['RECEIPT', 'Keep it somewhere safe'],
+  ['INSURANCE', 'The excess still applies'],
+  ['WATER DAMAGE', 'The sticker inside turned red'],
+  ['BAG OF RICE', 'Does not actually work'],
+  ['POCKET LINT', 'Lives in the charging port'],
+  ['TOOTHPICK', 'Cleans out the port'],
+  ['DROP TEST', 'Waist height, onto concrete'],
+  ['BUTTERFINGERS', 'How it happened'],
+  ['PHONE CASE', 'Would have helped'],
+  ['SCREEN TIME', 'Up forty percent this week'],
+  ['DO NOT DISTURB', 'The moon icon'],
+  ['AIRPLANE MODE', 'Seat backs upright'],
+  ['AUTOCORRECT', 'Ducking annoying'],
+  ['GROUP CHAT', 'Muted, obviously'],
+  ['VOICEMAIL', 'Nobody listens to it'],
+  ['POWER BANK', 'Charged, unlike the phone'],
+  ['DARK MODE', 'Easier on the eyes'],
+  ['SCREENSHOT', 'Proof'],
+  ['GREEN SCREEN', 'Film crews want one'],
+  ['SANDCASTLE', 'Speck\'s dream house'],
+  ['HOURGLASS', 'Speck\'s commute'],
+  ['SAND DUNE', 'A big pile of Speck\'s relatives'],
+  ['SANDPAPER', 'Speck\'s cousins, glued down'],
+  ['SILICON', 'Sand, after a lot of work'],
+  ['GLASS', 'Sand, after a lot of heat'],
+  ['BEACH', 'Where Speck grew up'],
+];
+const LIST = IC.APP
+  ? WORDS.filter(([w]) => !WEB_ONLY.has(w)).map(([w, h]) => [w, APP_HINTS[w] || h]).concat(APP_WORDS)
+  : WORDS;
 const ROWS = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'];
 const MISSES = 7;
 
@@ -122,8 +193,8 @@ let G = null;           // layout: gallows, word area, keys
 let bag = [];
 
 function nextWord() {
-  if (!bag.length) bag = WORDS.map((w, i) => i).sort(() => Math.random() - 0.5);
-  return WORDS[bag.pop()];
+  if (!bag.length) bag = LIST.map((w, i) => i).sort(() => Math.random() - 0.5);
+  return LIST[bag.pop()];
 }
 
 function newRound(st) {
@@ -171,7 +242,7 @@ function layout() {
     const x0 = kr.x + (kr.w - rw) / 2, y = kr.y + (kr.h - totalH) / 2 + ri * (kh + gap);
     [...row].forEach((ch, ci) => keys.push({ ch, x: x0 + ci * (kw + gap), y, w: kw, h: kh }));
   });
-  G = { fig, word, keys, kh, kw, scr };
+  G = { fig, word, keys, kh, kw, scr, kr };
 }
 
 // ---------- play ----------
@@ -180,14 +251,17 @@ function guess(ch) {
   if (S.guessed.includes(ch)) { S.shake = 0.3; S.shakeKey = ch; return; }
   S.guessed.push(ch);
   if (S.word.includes(ch)) {
+    IC.haptic('select');
     IC.tone(660, 990, 0.08, 'triangle', 0.04);
     if ([...S.word].every((c) => c === ' ' || S.guessed.includes(c))) {
       S.phase = 'won'; S.phaseT = 0; S.streak++;
+      IC.haptic('success');
       IC.tone(660, 660, 0.1, 'triangle', 0.04); IC.tone(880, 880, 0.1, 'triangle', 0.04, 0.1); IC.tone(1320, 1320, 0.2, 'triangle', 0.04, 0.2);
     }
   } else {
     S.misses++;
     S.partT.push(IC.clock);
+    IC.haptic('medium');
     IC.tone(2600, 1900, 0.03, 'square', 0.015);
     IC.noise(0.12, 0.03, 3000);
     if (S.misses >= MISSES) {
@@ -306,13 +380,15 @@ function drawKeys() {
 function selftest(n) {
   const problems = [];
   const seen = new Set();
-  for (const [w, h] of WORDS) {
+  for (const [w, h] of LIST) {
     if (!/^[A-Z]+( [A-Z]+)*$/.test(w)) problems.push(`bad word ${w}`);
     if (w.length > 16) problems.push(`long word ${w}`);
     if (!h || /[\u2013\u2014]/.test(h + w)) problems.push(`bad hint ${w}`);
     if (seen.has(w)) problems.push(`duplicate ${w}`);
     seen.add(w);
+    if (IC.APP && /apple|iphone|ipad|\bmac|\bduo\b|ifixit|jerry|siri|face id|android/i.test(`${w} ${h}`)) problems.push(`brand in ${w}`);
   }
+  for (const w of WEB_ONLY) if (!WORDS.some(([x]) => x === w)) problems.push(`web-only ${w} is not in the list`);
   layout();
   const L = IC.Lo;
   for (const k of G.keys) {
@@ -332,7 +408,7 @@ function selftest(n) {
     for (const ch of freq) { if (S.phase !== 'guess') break; guess(ch); }
     if (S.phase === 'won') wins++; else if (S.phase === 'lost') losses++; else problems.push(`stuck on ${S.word}`);
   }
-  return { n, words: WORDS.length, wins, losses, keys: G.keys.length, keySize: `${G.kw.toFixed(0)}x${G.kh.toFixed(0)}`, problems };
+  return { n, words: LIST.length, wins, losses, keys: G.keys.length, keySize: `${G.kw.toFixed(0)}x${G.kh.toFixed(0)}`, problems };
 }
 
 IC.register({
@@ -341,7 +417,9 @@ IC.register({
   label: 'Hangman',
   unit: 'in a row',
   noTapRestart: true,
-  how: 'The Duo already drew the gallows.',
+  // the result card goes where the keyboard was, so the answer stays readable
+  panelRect: (state) => (state === 'over' && G ? G.kr : null),
+  how: IC.APP ? 'Your screen already drew the gallows.' : 'The Duo already drew the gallows.',
   bestText: (v) => `Best ${fmt(v)} in a row`,
   icon(g, s) {
     IC.iconBg(g, s, '#25304a', '#0f1424');
@@ -399,7 +477,7 @@ IC.register({
     return false;
   },
   hud() { return { main: `${fmt(S.streak)} in a row`, sub: S.phase === 'guess' ? `${MISSES - S.misses} wrong letters left` : '' }; },
-  share: (r) => `I got ${fmt(r.score)} in a row before my Duo finished drawing the gallows.`,
+  share: (r) => `I got ${fmt(r.score)} in a row before my ${IC.APP ? 'screen' : 'Duo'} finished drawing the gallows.`,
   selftest,
 });
 

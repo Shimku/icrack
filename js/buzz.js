@@ -64,6 +64,7 @@ function buzz(st, p) {
   st.phase = 'buzz'; st.pt = 0; st.flash = 1;
   st.zap = p ? [p[0], p[1]] : [st.x, st.y];
   IC.hum.set(100, 0);
+  IC.haptic('fail');
   IC.tone(110, 90, 0.45, 'square', 0.06);
   IC.noise(0.4, 0.06, 2200);
   if (!IC.silent) IC.burst(st.zap[0], st.zap[1], 16, ['#ffd60a', '#ffffff', '#ff9f0a'], 24, [0.25, 0.6], 0.5);
@@ -76,6 +77,7 @@ function clear(st) {
   st.phase = 'clear'; st.pt = 0;
   st.popup = { text: `Round ${st.k} clear +${100 * st.k + bonus}`, t: 1.2, good: true };
   IC.hum.set(100, 0);
+  IC.haptic('success');
   IC.tone(660, 660, 0.1, 'triangle', 0.04); IC.tone(880, 880, 0.1, 'triangle', 0.04, 0.1); IC.tone(1320, 1320, 0.22, 'triangle', 0.04, 0.2);
 }
 
@@ -88,6 +90,7 @@ function step(st, dt) {
     if (st.t > limitOf(st.k)) {
       st.lives--;
       st.popup = { text: 'Too slow', t: 1.2, good: false };
+      IC.haptic('fail');
       IC.tone(300, 150, 0.3, 'square', 0.04);
       IC.hum.set(100, 0);
       if (st.lives <= 0) { st.phase = 'over'; return; }
@@ -262,7 +265,7 @@ IC.register({
     const left = S.phase === 'run' || S.phase === 'wait' ? Math.max(0, limitOf(S.k) - S.t) : 0;
     return { main: `${fmt(S.score)} pts`, sub: `Round ${S.k}  Lives ${S.lives}  ${left.toFixed(1)} s` };
   },
-  share: (r) => `I steered a ring along my Duo's green line for ${fmt(r.score)} points without touching it. Mostly.`,
+  share: (r) => `I steered a ring along my ${IC.APP ? '' : 'Duo\'s '}green line for ${fmt(r.score)} points without touching it. Mostly.`,
   selftest,
 });
 })();

@@ -5,7 +5,10 @@
 const { clamp, fmt } = IC;
 const ctx = IC.ctx;
 const COLS = 10, HID = 3;
-const COLORS = { I: '#5ac8fa', O: '#ffcc00', T: '#af52de', S: '#34c759', Z: '#ff3b30', J: '#0a84ff', L: '#ff9500' };
+// In the app the seven pieces take the seven colours of the test card it opens on, flat.
+const COLORS = IC.APP
+  ? { I: '#00c6c6', O: '#c6c600', T: '#c600c6', S: '#00c600', Z: '#c60000', J: '#2828d8', L: '#c6c6c6' }
+  : { I: '#5ac8fa', O: '#ffcc00', T: '#af52de', S: '#34c759', Z: '#ff3b30', J: '#0a84ff', L: '#ff9500' };
 const SHAPES = {
   I: [[0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]],
   O: [[1, 1], [1, 1]],
@@ -167,6 +170,7 @@ function lock(st) {
     if (p.y + cy >= 0) above = false;
   }
   st.p = null;
+  IC.haptic('light');
   IC.tone(160, 120, 0.05, 'square', 0.02);
   if (above) { st.over = true; return; }
   st.chain = 0;
@@ -187,7 +191,7 @@ function full(st, r) {
 function findClears(st) {
   const rows = [];
   for (let r = -HID; r < B.rows; r++) if (full(st, r)) rows.push(r);
-  if (rows.length) { st.clearing = { rows, t: CLEAR_T }; IC.tone(660 + st.chain * 220, 990 + st.chain * 220, 0.12, 'triangle', 0.035); }
+  if (rows.length) { st.clearing = { rows, t: CLEAR_T }; IC.haptic(rows.length > 1 ? 'heavy' : 'medium'); IC.tone(660 + st.chain * 220, 990 + st.chain * 220, 0.12, 'triangle', 0.035); }
   else st.clearing = null;
 }
 // Remove a row: in each column that reaches it, everything above drops one.
@@ -294,7 +298,16 @@ function cellRect(c, r) { return [B.x0 + c * B.s, B.y0 + r * B.s]; }
 function block(x, y, s, color, alpha = 1, ghost = false) {
   ctx.save();
   ctx.globalAlpha = alpha;
-  const pad = Math.max(1, s * 0.06), rad = s * 0.22;
+  if (IC.APP && !ghost) {
+    const pad = Math.max(0.5, s * 0.04), edge = Math.max(1, s * 0.09);
+    ctx.fillStyle = color;
+    ctx.fillRect(x + pad, y + pad, s - 2 * pad, s - 2 * pad);
+    ctx.fillStyle = shade(color, -0.3);
+    ctx.fillRect(x + pad, y + s - pad - edge, s - 2 * pad, edge);
+    ctx.restore();
+    return;
+  }
+  const pad = Math.max(1, s * 0.06), rad = IC.APP ? s * 0.04 : s * 0.22;
   IC.rrect(ctx, x + pad, y + pad, s - 2 * pad, s - 2 * pad, rad);
   if (ghost) {
     ctx.strokeStyle = color; ctx.lineWidth = Math.max(1, s * 0.07); ctx.stroke();

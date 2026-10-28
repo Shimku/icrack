@@ -22,7 +22,7 @@ const TABLES = {
     rail: 'rgba(255,255,255,0.92)', post: '#ffffff', sling: 'rgba(0,113,227,0.3)', slingEdge: '#0071e3',
     flip: '#ffffff', flipEdge: '#0071e3', lane: 'rgba(60,35,10,0.35)', laneLit: '#0071e3', text: '#2a1a08',
     disp: { bg: 'rgba(8,8,10,0.92)', edge: 'rgba(255,255,255,0.25)', fg: '#f5f5f7', fg2: '#4da3ff' },
-    apron: ['rgba(245,245,247,0.95)', 'rgba(222,222,228,0.97)'],
+    apron: ['rgba(245,245,247,0.95)', 'rgba(222,222,228,0.97)'], accent: '#0071e3', accentSoft: 'rgba(0,113,227,0.18)',
   },
   bench: {
     name: 'Teardown', word: 'FIX', drain: 'Lost a screw.', display: 'TEARDOWN', light: false,
@@ -39,6 +39,16 @@ const TABLES = {
     apron: ['rgba(214,170,104,0.96)', 'rgba(190,146,84,0.98)'],
   },
 };
+// The App Store build has no Apple in it, so the store counter is a repair shop.
+if (IC.APP) {
+  TABLES.neon.word = 'ZAP';
+  Object.assign(TABLES.genius, {
+    name: 'Repair Shop', word: 'PAY', display: 'REPAIR SHOP',
+    sling: 'rgba(15,139,141,0.3)', slingEdge: '#0f8b8d', flipEdge: '#0f8b8d', laneLit: '#0f8b8d',
+    accent: '#0f8b8d', accentSoft: 'rgba(15,139,141,0.18)',
+  });
+  TABLES.genius.disp = Object.assign({}, TABLES.genius.disp, { fg2: '#5fd4d6' });
+}
 const ORDER = ['neon', 'genius', 'bench', 'beach'];
 let TB = TABLES.neon, tbId = 'neon';
 function pick(id) {
@@ -282,6 +292,7 @@ function hitTarget(st, s) {
   s.down = true;
   st.drops++;
   add(st, 500);
+  IC.haptic('medium');
   IC.tone(700, 350, 0.08, 'square', 0.03);
   if (T.targets.every((q) => q.down)) {
     st.quotes++;
@@ -337,6 +348,7 @@ function collideBumper(st, b, k) {
     return;
   }
   st.hits++;
+  IC.haptic('light');
   IC.tone(520 + Math.random() * 80, 260, 0.08, 'square', 0.03);
 }
 
@@ -420,6 +432,7 @@ function physics(st, dt) {
       st.msg = { text: 'Ball saved', t: 1.4 };
       return;
     }
+    IC.haptic('heavy');
     IC.tone(300, 70, 0.6, 'sawtooth', 0.03);
     if (st.ball >= st.balls) { st.b = null; st.over = true; return; }
     st.ball++;
@@ -567,13 +580,13 @@ function drawBumper(k) {
   ctx.translate(k.x, k.y);
   if (lit) { ctx.shadowColor = tbId === 'neon' ? k.color : '#ffffff'; ctx.shadowBlur = r * 1.5; }
   if (tbId === 'genius') {
-    // round white store tables with a blue ring
+    // round white store tables with a coloured ring
     ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fillStyle = lit ? '#0071e3' : '#f7f7f9'; ctx.fill();
+    ctx.fillStyle = lit ? TB.accent : '#f7f7f9'; ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.lineWidth = Math.max(2, r * 0.16); ctx.strokeStyle = '#0071e3'; ctx.stroke();
+    ctx.lineWidth = Math.max(2, r * 0.16); ctx.strokeStyle = TB.accent; ctx.stroke();
     ctx.beginPath(); ctx.arc(0, 0, r * 0.45, 0, Math.PI * 2);
-    ctx.fillStyle = lit ? '#ffffff' : 'rgba(0,113,227,0.18)'; ctx.fill();
+    ctx.fillStyle = lit ? '#ffffff' : TB.accentSoft; ctx.fill();
   } else if (tbId === 'bench') {
     // screw heads, pentalobe
     const gr = ctx.createRadialGradient(-r * 0.35, -r * 0.4, r * 0.1, 0, 0, r);
@@ -819,6 +832,7 @@ function sideOf(x) { return x < IC.Lo.sx + IC.Lo.sw / 2 ? 'l' : 'r'; }
 function refreshTouch() {
   let l = false, r = false;
   for (const s of touches.values()) { if (s === 'l') l = true; else r = true; }
+  if ((l && !held.l) || (r && !held.r)) IC.haptic('light');
   held.l = l || keyHeld.l; held.r = r || keyHeld.r;
   held.plunge = touches.size > 0 || keyHeld.p;
 }
@@ -954,9 +968,11 @@ IC.register({
     return true;
   },
   hud() { return S ? { main: fmt(S.score), sub: `Ball ${S.ball} of ${S.balls}${S.mult > 1 ? `  x${S.mult}` : ''}` } : { main: '', sub: '' }; },
-  share: (r) => (tbId === 'neon'
-    ? `I scored ${fmt(r.score)} on a pinball table made out of my Duo's green line.`
-    : `I scored ${fmt(r.score)} on the ${TB.name} pinball table on my Duo's green line.`),
+  share: (r) => {
+    const mine = IC.APP ? 'my green line' : 'my Duo\'s green line';
+    return tbId === 'neon' ? `I scored ${fmt(r.score)} on a pinball table made out of ${mine}.`
+      : `I scored ${fmt(r.score)} on the ${TB.name} pinball table on ${mine}.`;
+  },
   selftest,
 });
 })();

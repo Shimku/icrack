@@ -76,6 +76,28 @@
   #brand .tag { font-size: calc(var(--k) * 15px); font-weight: 600; }
   #b-install { pointer-events: auto; font-size: calc(var(--k) * 13px); padding: .5em 1.15em; margin-top: calc(var(--k) * 8px); }
 
+  /* the app's menu: a test card */
+  #bars { position: fixed; display: flex; }
+  #bars.rows { flex-direction: column; }
+  .bar {
+    flex: 1 1 0; min-width: 0; min-height: 0; position: relative; display: flex; gap: calc(var(--fs) * .55);
+    border: 0; border-radius: 0; background: var(--c); color: var(--ink); text-align: left;
+    -webkit-backdrop-filter: none; backdrop-filter: none; overflow: hidden;
+  }
+  .bar::after { content: ""; position: absolute; background: var(--cast); }
+  .bar img { width: var(--gs); height: var(--gs); display: block; flex: none; }
+  .bar .t { display: flex; flex-direction: column; gap: .1em; min-width: 0; }
+  .bar b { font-size: var(--fs); font-weight: 700; letter-spacing: -.01em; line-height: 1.08; }
+  .bar small { font-size: calc(var(--fs) * .68); font-weight: 600; opacity: .72; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar:active { filter: brightness(.8); }
+  #bars.cols .bar { flex-direction: column; justify-content: space-between; }
+  #bars.cols .bar::after { left: 0; right: 0; bottom: 0; height: var(--cs); }
+  #bars.rows .bar { flex-direction: row; align-items: center; }
+  #bars.rows .bar .t { flex-direction: row; align-items: baseline; justify-content: space-between; flex: 1; gap: .6em; }
+  #bars.rows .bar::after { top: 0; bottom: 0; right: 0; width: var(--cs); }
+  body.native.bleed { background: #060707; }
+  body.native .card { background: rgba(14, 15, 16, .74); border-color: rgba(255, 255, 255, .12); }
+
   /* panels */
   #panel {
     --k: 1; position: fixed; display: flex; align-items: center; justify-content: center; padding: 10px;
@@ -147,6 +169,7 @@
 <div id="safe"></div>
 <div id="hub">
   <div id="apps"></div>
+  <div id="bars" class="hidden"></div>
   <div id="brand">
     <h1 class="logo">iCrack</h1>
     <p class="tag">Make some use of the Green Line of Death.</p>
@@ -156,13 +179,13 @@
 <div id="hud" class="hidden"><button id="b-home" class="pill">Home</button><div class="hud-text"><span id="hud-main"></span><span id="hud-sub"></span></div></div>
 <div id="panel" class="hidden"><div class="card" id="card"></div></div>
 <!-- home screen order -->
-<script src="js/core.js?v=13"></script>
-<script src="js/blocks.js?v=13"></script>
-<script src="js/walk.js?v=13"></script>
-<script src="js/hangman.js?v=13"></script>
-<script src="js/pinball.js?v=13"></script>
-<script src="js/metro.js?v=13"></script>
-<script src="js/buzz.js?v=13"></script>
+<script src="js/core.js?v=14"></script>
+<script src="js/blocks.js?v=14"></script>
+<script src="js/walk.js?v=14"></script>
+<script src="js/hangman.js?v=14"></script>
+<script src="js/pinball.js?v=14"></script>
+<script src="js/metro.js?v=14"></script>
+<script src="js/buzz.js?v=14"></script>
 <script>IC.boot();</script>
 </body>
 </html>
