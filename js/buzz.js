@@ -1,6 +1,4 @@
-// Buzz Wire: the carnival game where you steer a ring along a wire without
-// touching it. The wire is the line. Drag anywhere to move the ring, so your
-// finger never has to cover the line. Each round the ring gets smaller.
+// Buzz Wire. The line is the wire. Drag anywhere to move the ring.
 (() => {
 'use strict';
 const { clamp, fmt } = IC;

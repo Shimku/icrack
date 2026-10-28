@@ -1,11 +1,5 @@
-// Green Line: the defect is a metro line now. Hold to go, let go to brake, and
-// stop with the doors at the yellow mark. Out to the end of the line and back
-// again is a shift.
-//
-// One hold, one release per stop. Letting go commits to the brake, and where
-// the train comes to rest is where it stopped, so creeping up on the mark with
-// lots of little taps doesn't work. The one exception: a first go that was only
-// a tap (it never got going) is forgiven once per stop.
+// Green Line. One hold and one release per stop; letting go brakes all the
+// way, so tapping up to the mark doesn't work. A first tap is forgiven once.
 (() => {
 'use strict';
 const { clamp, fmt } = IC;

@@ -1,16 +1,5 @@
-// Walk the Line: Speck, a grain of sand in your hinge, walks the defect.
-//
-// Bad: dead pixels open holes in the line, and $1,000 repair bills slide along it.
-// Good: iFixit kits drop in now and then. Carrying one fixes the next hole or
-// bill for free.
-//
-// Fairness rules, each one closing a way an earlier version could corner you:
-// - holes keep a jump's length from the ends of the line, the corner and each other
-// - bills enter from the end Speck is walking away from and lift off before
-//   they reach an end, so nothing arrives just as he turns round
-// - landing on a bill bounces him; a short grace window covers late taps at holes
-// The selftest replays every death and searches tap timings to prove it could
-// have been avoided.
+// Walk the Line. Holes and $1,000 bills are bad, iFixit kits fix one for free.
+// Spawn rules keep every death avoidable; the selftest checks that.
 (() => {
 'use strict';
 const { clamp, lerp, smooth, fmt, rnd } = IC;

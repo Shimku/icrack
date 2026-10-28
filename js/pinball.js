@@ -1,7 +1,4 @@
-// Pinball: the line is part of the table. The hinge line is the wall beside
-// the right flipper. The line across is a trampoline shelf that throws the ball
-// back into play, and the plunger ball sits on it. The corner sealed off below
-// the shelf is where the score display goes.
+// Pinball. Hinge line = wall, line across = trampoline, sealed corner = score.
 (() => {
 'use strict';
 const { clamp, fmt } = IC;

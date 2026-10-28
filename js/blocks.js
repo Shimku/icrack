@@ -1,9 +1,5 @@
-// Line Clear: falling blocks, where the green line is the one line you can't clear.
-// Inside the well the line is a shelf and a wall. Above it rows run the full
-// width; below it the well is only as wide as the part left of the hinge line,
-// and the corner past the hinge is sealed off. A row clears when every cell
-// that can hold a block is full. When a row below the shelf clears, only the
-// columns that reach it drop, so blocks resting on the line stay put.
+// Line Clear. The line is a shelf and a wall inside the well; the corner past
+// the hinge is sealed, so rows below the shelf are shorter.
 (() => {
 'use strict';
 const { clamp, fmt } = IC;

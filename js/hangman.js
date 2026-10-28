@@ -1,5 +1,4 @@
-// Hangman: the Duo already drew the gallows. The hinge line is the post, the
-// line across is the beam, and every wrong letter adds another green line.
+// Hangman. The L is the gallows.
 (() => {
 'use strict';
 const { clamp, fmt } = IC;

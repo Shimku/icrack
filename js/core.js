@@ -1,13 +1,6 @@
-// iCrack core: screen layout, the defect line, calibration, menus, input, sound.
-//
-// The line is treated as hardware: it never moves, flickers or goes away, and
-// every game is built around it. On a real Duo it is the panel's own line (the
-// drawn one is switched off after calibration). Everywhere else it is drawn in
-// the same place.
-//
-// Games register with IC.register(). Track games use a 1D track that follows
-// the L: s = 0 at the hinge line's far end, s = LB at the corner, s = total at
-// the other end. Distances on the track are in U = 1% of the screen's short side.
+// iCrack core: layout, the line, calibration, menus, input, sound.
+// Track positions run along the L: s = 0 at the far end of the hinge line,
+// s = LB at the corner, s = total at the far end. Units are U, 1% of the short side.
 (() => {
 'use strict';
 
@@ -18,10 +11,13 @@ const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 Object.assign(IC, { canvas, ctx, $, params });
 
-IC.SHOT = params.get('shot');            // 'og' | 'icon': staged stills for social cards
-IC.SELFTEST = params.get('selftest');    // headless fairness and logic tests
-IC.SIM = params.get('sim');              // play N seconds on autopilot, then freeze
-IC.BOT = params.has('bot') || !!IC.SELFTEST;
+// Test switches only work on this machine, so a shared link can't run them.
+const LOCAL = location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+const hook = (k) => (LOCAL ? params.get(k) : null);
+IC.SHOT = hook('shot');                  // 'og' | 'icon': stills for the share card and icon
+IC.SELFTEST = hook('selftest');          // headless fairness and logic tests
+IC.SIM = hook('sim');                    // play N seconds on autopilot, then freeze
+IC.BOT = (LOCAL && params.has('bot')) || !!IC.SELFTEST;
 IC.TEST = !!(IC.SHOT || IC.SELFTEST || IC.SIM);
 IC.FRAMED = params.has('frame') ? params.get('frame') !== '0'
   : IC.SHOT === 'og' ? true : IC.SHOT === 'icon' ? false
@@ -504,8 +500,7 @@ function drawGuide() {
 }
 
 // ---------- Speck ----------
-// A grain of sand: a small faceted crystal, lit from the top left, with a
-// sparkle, a bit of grit and beady eyes.
+// A grain of sand.
 const SPECK_R = 2.4, SPECK_LEG = 0.9;
 IC.SPECK_R = SPECK_R; IC.SPECK_LEG = SPECK_LEG;
 const GRAIN = [[-2.62, 1.0], [-1.78, 1.05], [-0.88, 0.97], [0.02, 1.06], [0.86, 0.95], [1.7, 1.03], [2.5, 0.98]];
@@ -775,12 +770,10 @@ function showInfo() {
 }
 
 // ---------- add to Home Screen ----------
-// iOS gives pages no install prompt to trigger, so a Safari tab gets a button
-// that shows the two taps. Chrome and Edge hand over a real prompt instead.
-// From the Home Screen the game runs full screen and the line lands on the
-// panel's own, with no Safari bars pushing it down.
+// iOS has no install prompt, so Safari tabs get a button with the steps.
+// Chrome and Edge get their real prompt.
 const STANDALONE = navigator.standalone === true || matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
-const IOS_TAB = params.get('install') === 'ios' || ('standalone' in navigator && !navigator.standalone);
+const IOS_TAB = hook('install') === 'ios' || ('standalone' in navigator && !navigator.standalone);
 let installEvt = null, installFrom = 'hub';
 IC.canInstall = () => !IC.SHOT && !IC.SELFTEST && !IC.FRAMED && !STANDALONE && (IOS_TAB || !!installEvt);
 function refreshInstall() {
@@ -1156,8 +1149,7 @@ function drawHello(s, h) {
   let c = place(side);
   if (!fits(c)) { side = -side; c = place(side); }
   const x0 = c[0] - w / 2, y0 = c[1] - bh / 2, rad = bh / 2;
-  // The tail points back at his head. Its base sits well inside the bubble, so
-  // it joins the round end with no gap, and both are filled as one shape.
+  // tail starts inside the bubble so it meets the round end; one fill for both
   const tip = [bx + n[0] * R * 0.5 + t[0] * side * R * 1.2, by + n[1] * R * 0.5 + t[1] * side * R * 1.2], bw = fs * 0.42;
   let b1, b2;
   if (tip[0] <= x0 || tip[0] >= x0 + w) {
