@@ -1156,23 +1156,27 @@ function drawHello(s, h) {
   let c = place(side);
   if (!fits(c)) { side = -side; c = place(side); }
   const x0 = c[0] - w / 2, y0 = c[1] - bh / 2, rad = bh / 2;
-  // the tail points back at his head
-  const tip = [bx + n[0] * R * 0.5 + t[0] * side * R * 1.2, by + n[1] * R * 0.5 + t[1] * side * R * 1.2], bw = fs * 0.4;
+  // The tail points back at his head. Its base sits well inside the bubble, so
+  // it joins the round end with no gap, and both are filled as one shape.
+  const tip = [bx + n[0] * R * 0.5 + t[0] * side * R * 1.2, by + n[1] * R * 0.5 + t[1] * side * R * 1.2], bw = fs * 0.42;
   let b1, b2;
   if (tip[0] <= x0 || tip[0] >= x0 + w) {
-    const ex = tip[0] <= x0 ? x0 + 1 : x0 + w - 1, yy = clamp(tip[1], y0 + bw + 2, y0 + bh - bw - 2);
+    const ex = tip[0] <= x0 ? x0 + rad * 0.8 : x0 + w - rad * 0.8, yy = clamp(tip[1], y0 + bw, y0 + bh - bw);
     b1 = [ex, yy - bw]; b2 = [ex, yy + bw];
   } else {
-    const ey = tip[1] >= y0 + bh ? y0 + bh - 1 : y0 + 1, xx = clamp(tip[0], x0 + rad, x0 + w - rad);
+    const ey = tip[1] >= y0 + bh ? y0 + bh - bw : y0 + bw, xx = clamp(tip[0], x0 + rad, x0 + w - rad);
     b1 = [xx - bw, ey]; b2 = [xx + bw, ey];
   }
+  // wind the tail the same way as the rounded rect, so the fill is their union
+  const tri = [b1, tip, b2];
+  if ((tri[1][0] - tri[0][0]) * (tri[2][1] - tri[0][1]) - (tri[2][0] - tri[0][0]) * (tri[1][1] - tri[0][1]) < 0) tri.reverse();
   ctx.shadowColor = 'rgba(0,0,0,0.3)';
   ctx.shadowBlur = fs * 0.8;
   ctx.fillStyle = 'rgba(255,255,255,0.96)';
   rrect(ctx, x0, y0, w, bh, rad);
+  ctx.moveTo(tri[0][0], tri[0][1]); ctx.lineTo(tri[1][0], tri[1][1]); ctx.lineTo(tri[2][0], tri[2][1]); ctx.closePath();
   ctx.fill();
   ctx.shadowBlur = 0;
-  ctx.beginPath(); ctx.moveTo(b1[0], b1[1]); ctx.lineTo(tip[0], tip[1]); ctx.lineTo(b2[0], b2[1]); ctx.closePath(); ctx.fill();
   ctx.fillStyle = '#1d1636';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
