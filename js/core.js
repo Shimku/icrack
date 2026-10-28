@@ -1072,10 +1072,15 @@ addEventListener('pointermove', (e) => {
     return;
   }
   if (IC.state === 'play' && IC.game.move) IC.game.move(p, pointers.has(e.pointerId));
+  if (IC.state === 'hub' && e.pointerType === 'mouse') {
+    canvas.style.cursor = onSpeck(p) || (idle.money > 0 && payUrl && inBox(p, helloBox, 8)) ? 'pointer' : '';
+  }
 });
 function up(e) {
   pointers.delete(e.pointerId);
   if (drag && e.pointerId === drag.id) { drag = null; save(); placePanel(); return; }
+  // on the way up, so opening the link counts as a tap in iOS Safari
+  if (IC.state === 'hub' && !(e.target.closest && e.target.closest('button, a'))) hubTap(pt(e));
   if (IC.state === 'play' && IC.game.up) IC.game.up(pt(e));
 }
 addEventListener('pointerup', up);
@@ -1107,8 +1112,26 @@ addEventListener('resize', () => {
 // ---------- loop ----------
 const STEP = 1 / 120;
 IC.STEP = STEP;
-// Speck wanders the line on the home screen.
-const idle = { s: 0, dir: 1, h: 0, vh: 0, pause: 1, walk: 0 };
+// Speck wanders the line on the home screen. Tap him and he asks for the
+// $1,000 instead. With PAY_URL set, that bubble opens it.
+const PAY_URL = '';
+const payUrl = hook('pay') ? 'https://example.com/' : PAY_URL;
+const idle = { s: 0, dir: 1, h: 0, vh: 0, pause: 1, walk: 0, money: 0 };
+let helloBox = null;
+const inBox = (p, b, pad) => !!b && p.x > b.x - pad && p.x < b.x + b.w + pad && p.y > b.y - pad && p.y < b.y + b.h + pad;
+function onSpeck(p) {
+  const [cx, cy] = at(idle.s, idle.h + SPECK_LEG + SPECK_R);
+  return Math.hypot(p.x - cx, p.y - cy) < Math.max(SPECK_R * IC.Lo.U * 1.8, 26);
+}
+function hubTap(p) {
+  if (idle.money > 0 && payUrl && inBox(p, helloBox, 8)) { window.open(payUrl, '_blank', 'noopener'); return; }
+  if (!onSpeck(p)) return;
+  idle.money = 5;
+  idle.pause = 5;                          // he stops to ask
+  if (idle.h === 0) idle.vh = 30;
+  IC.tone(1568, 1568, 0.07, 'square', 0.03);
+  IC.tone(2093, 2093, 0.2, 'triangle', 0.04, 0.07);
+}
 
 function update(dt) {
   IC.clock += dt;
@@ -1123,6 +1146,7 @@ function update(dt) {
 function stepIdle(dt) {
   const L = IC.Lo, e = IC.ends(SPECK_R * 1.2);
   if (!idle.s) idle.s = L.LB + L.LA * 0.62;
+  if (idle.money > 0) idle.money -= dt;
   if (idle.pause > 0) idle.pause -= dt;
   else {
     idle.s += idle.dir * 9 * dt;
@@ -1136,9 +1160,10 @@ function stepIdle(dt) {
 
 // Speck says hello from the home screen, in a bubble beside his head.
 function drawHello(s, h) {
-  const L = IC.Lo, U = L.U, fs = clamp(U * 2.1, 11, 17), text = 'Hi, I\'m sand.';
+  const L = IC.Lo, U = L.U, fs = clamp(U * 2.1, 11, 17);
+  const ask = idle.money > 0, link = ask && !!payUrl, text = ask ? 'Give me $1,000 instead.' : 'Hi, I\'m sand.';
   ctx.save();
-  ctx.font = `600 ${fs}px ${FONT}`;
+  ctx.font = `${link ? 700 : 600} ${fs}px ${FONT}`;
   const w = ctx.measureText(text).width + fs * 1.3, bh = fs * 1.9, tail = fs * 0.8, R = SPECK_R * U;
   const [bx, by, na] = at(s, h + SPECK_LEG + SPECK_R);
   const n = [Math.cos(na), Math.sin(na)], t = [-n[1], n[0]];
@@ -1164,12 +1189,13 @@ function drawHello(s, h) {
   if ((tri[1][0] - tri[0][0]) * (tri[2][1] - tri[0][1]) - (tri[2][0] - tri[0][0]) * (tri[1][1] - tri[0][1]) < 0) tri.reverse();
   ctx.shadowColor = 'rgba(0,0,0,0.3)';
   ctx.shadowBlur = fs * 0.8;
-  ctx.fillStyle = 'rgba(255,255,255,0.96)';
+  ctx.fillStyle = link ? '#30d158' : 'rgba(255,255,255,0.96)';
   rrect(ctx, x0, y0, w, bh, rad);
   ctx.moveTo(tri[0][0], tri[0][1]); ctx.lineTo(tri[1][0], tri[1][1]); ctx.lineTo(tri[2][0], tri[2][1]); ctx.closePath();
   ctx.fill();
   ctx.shadowBlur = 0;
-  ctx.fillStyle = '#1d1636';
+  helloBox = { x: x0, y: y0, w, h: bh };
+  ctx.fillStyle = link ? '#fff' : '#1d1636';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, c[0], c[1] + fs * 0.04);
@@ -1244,6 +1270,7 @@ IC.boot = () => {
     return;
   }
   if (IC.SHOT) { if (IC.SHOT === 'icon') hub.classList.add('hidden'); still(); return; }
+  if (hook('tap')) { idle.money = 1e6; idle.pause = 1e6; }
 
   let last = performance.now(), acc = 0;
   function frame(now) {
