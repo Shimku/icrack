@@ -709,9 +709,9 @@ IC.end = (r) => {
   setState('over');
   overT = -(r.delay || 0);
   const lowWins = g.lowerIsBetter;
-  const prev = IC.best(g.id);
+  const key = bestKey(g), prev = IC.best(key);
   r.newBest = r.score > 0 && (!prev || (lowWins ? r.score < prev : r.score > prev));
-  if (r.newBest) { store.best[g.id] = r.score; save(); }
+  if (r.newBest) { store.best[key] = r.score; save(); }
   result = r;
   IC.hum.stop();
   if (IC.SELFTEST) return;
@@ -732,10 +732,14 @@ function bestText(g, v) {
   return g.bestText ? g.bestText(v) : `Best ${fmt(v)} ${g.unit}`;
 }
 
+// A game with several tables (Pinball) keeps a best score per table.
+function bestKey(g) { return g.bestKey ? g.bestKey() : g.id; }
+
 function showTitle() {
   const g = IC.game;
   showPanel(`<h2>${esc(g.name)}</h2><p class="how">${esc(howText(g))}</p>`
-    + `<p class="cta">${IC.FRAMED ? 'Click to play' : 'Tap to play'}</p><p class="sub">${esc(bestText(g, IC.best(g.id)))}</p>`);
+    + (g.titleExtra ? g.titleExtra() : '')
+    + `<p class="cta">${IC.FRAMED ? 'Click to play' : 'Tap to play'}</p><p class="sub">${esc(bestText(g, IC.best(bestKey(g))))}</p>`);
 }
 
 function showOver() {
@@ -743,7 +747,7 @@ function showOver() {
   if (!g || !r || IC.state !== 'over') return;
   showPanel(`<p class="why">${esc(r.why)}</p>`
     + `<p class="big">${esc(r.scoreText || fmt(r.score))}<small> ${esc(r.unit || g.unit)}</small></p>`
-    + `<p class="sub">${esc(r.newBest ? 'New best' : bestText(g, IC.best(g.id)))}</p>`
+    + `<p class="sub">${esc(r.newBest ? 'New best' : bestText(g, IC.best(bestKey(g))))}</p>`
     + (r.extra ? `<p class="sub">${esc(r.extra)}</p>` : '')
     + '<div class="row"><button class="solid" data-act="again">Play again</button><button data-act="share">Share</button></div>'
     + (r.fine ? `<p class="fine">${esc(r.fine)}</p>` : ''));
@@ -823,6 +827,7 @@ card.addEventListener('click', (e) => {
   else if (act === 'sound') { store.muted = !store.muted; save(); if (store.muted) IC.hum.stop(); else unlockAudio(); b.textContent = `Sound: ${store.muted ? 'off' : 'on'}`; }
   else if (act === 'calib') showCalib();
   else if (act === 'info') showInfo();
+  else if (act === 'opt' && IC.game && IC.game.option) { IC.game.option(b.dataset.v); showTitle(); }
   else if (act === 'back') showSettings();
   else if (act === 'install') install('settings');
   else if (act === 'done') { if (IC.state === 'calib' || (IC.state === 'install' && installFrom === 'settings')) showSettings(); else IC.home(); }
@@ -874,6 +879,7 @@ function updateHud() {
   hud.style.left = `${L.sx + e.l + L.U * 2.5}px`;
   hud.style.top = `${L.sy + e.t + L.U * 2.2}px`;
   hud.style.setProperty('--hs', `${clamp(L.U * 3.6, 13, 26)}px`);
+  hud.classList.toggle('dark', !!(g.hudDark && g.hudDark()));
   const h = IC.state === 'title' ? { main: '', sub: '' } : (g.hud ? g.hud() : { main: '', sub: '' });
   const key = `${h.main}|${h.sub}`;
   if (key !== hudCache) { hudCache = key; hudMain.textContent = h.main || ''; hudSub.textContent = h.sub || ''; }

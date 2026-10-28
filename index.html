@@ -131,6 +131,9 @@
   #hud { --hs: 16px; position: fixed; display: flex; align-items: center; gap: 10px; pointer-events: none; }
   #hud .pill { pointer-events: auto; font-size: calc(var(--hs) * .8); padding: .3em .85em; }
   .hud-text { display: flex; align-items: baseline; gap: 8px; text-shadow: 0 1px 10px rgba(0, 0, 0, .45); }
+  #hud.dark .hud-text { color: #1c1408; text-shadow: 0 1px 8px rgba(255, 255, 255, .55); }
+  #hud.dark .pill { color: #1c1408; border-color: rgba(0, 0, 0, .28); background: rgba(255, 255, 255, .35); }
+  .card button.on { background: #fff; color: #111; border-color: #fff; }
   #hud-main { font-size: var(--hs); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
   #hud-sub { font-size: calc(var(--hs) * .72); font-weight: 600; opacity: .7; font-variant-numeric: tabular-nums; }
   body[data-state="title"] .hud-text { display: none; }
@@ -150,13 +153,13 @@
 <div id="hud" class="hidden"><button id="b-home" class="pill">Home</button><div class="hud-text"><span id="hud-main"></span><span id="hud-sub"></span></div></div>
 <div id="panel" class="hidden"><div class="card" id="card"></div></div>
 <!-- home screen order -->
-<script src="js/core.js?v=10"></script>
-<script src="js/blocks.js?v=10"></script>
-<script src="js/walk.js?v=10"></script>
-<script src="js/hangman.js?v=10"></script>
-<script src="js/pinball.js?v=10"></script>
-<script src="js/metro.js?v=10"></script>
-<script src="js/buzz.js?v=10"></script>
+<script src="js/core.js?v=11"></script>
+<script src="js/blocks.js?v=11"></script>
+<script src="js/walk.js?v=11"></script>
+<script src="js/hangman.js?v=11"></script>
+<script src="js/pinball.js?v=11"></script>
+<script src="js/metro.js?v=11"></script>
+<script src="js/buzz.js?v=11"></script>
 <script>IC.boot();</script>
 </body>
 </html>
