@@ -968,7 +968,7 @@ function placeHub() {
   const gh = rows * (size + 30) + (rows - 1) * 14;
   Object.assign(apps.style, {
     left: `${r.x}px`, top: `${r.y + Math.max(0, (r.h - gh) / 2)}px`, width: `${r.w}px`,
-    gridTemplateColumns: `repeat(${cols}, 1fr)`,
+    gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
   });
   apps.style.setProperty('--icon', `${size}px`);
   // the leftover corner: the area left of the hinge line and below the band, in the usual layout
@@ -1073,7 +1073,7 @@ addEventListener('pointermove', (e) => {
   }
   if (IC.state === 'play' && IC.game.move) IC.game.move(p, pointers.has(e.pointerId));
   if (IC.state === 'hub' && e.pointerType === 'mouse') {
-    canvas.style.cursor = onSpeck(p) || (idle.money > 0 && payUrl && inBox(p, helloBox, 8)) ? 'pointer' : '';
+    canvas.style.cursor = onSpeck(p) || (asking() && inBox(p, helloBox, 8)) ? 'pointer' : '';
   }
 });
 function up(e) {
@@ -1112,22 +1112,44 @@ addEventListener('resize', () => {
 // ---------- loop ----------
 const STEP = 1 / 120;
 IC.STEP = STEP;
-// Speck wanders the line on the home screen. Tap him and he asks for the
-// $1,000 instead. With PAY_URL set, that bubble opens it.
+// Speck wanders the line on the home screen. Tap him and he stops to say
+// something, then walks on. The first line is always the $1,000 one; after
+// that they come in a shuffled order. With PAY_URL set, the $1,000 bubble opens it.
 const PAY_URL = '';
 const payUrl = hook('pay') ? 'https://example.com/' : PAY_URL;
-const idle = { s: 0, dir: 1, h: 0, vh: 0, pause: 1, walk: 0, money: 0 };
+const LINES = [
+  'Give me $1,000 instead.',
+  'iCrack or Green Line of Death?',
+  'Makes you miss the Bendgate.',
+  'You\'re holding it wrong.',
+  'It\'s a feature.',
+  'A small number of units, they said.',
+  'Not with your nails!',
+  'I\'m coarse and I get everywhere.',
+];
+const SAY_T = 4;
+const idle = { s: 0, dir: 1, h: 0, vh: 0, pause: 1, walk: 0, say: 0, line: -1, bag: [] };
+function nextLine() {
+  if (idle.line < 0) return 0;
+  if (!idle.bag.length) {
+    idle.bag = LINES.map((_, i) => i).filter((i) => i !== idle.line);
+    for (let i = idle.bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [idle.bag[i], idle.bag[j]] = [idle.bag[j], idle.bag[i]]; }
+  }
+  return idle.bag.pop();
+}
 let helloBox = null;
 const inBox = (p, b, pad) => !!b && p.x > b.x - pad && p.x < b.x + b.w + pad && p.y > b.y - pad && p.y < b.y + b.h + pad;
 function onSpeck(p) {
   const [cx, cy] = at(idle.s, idle.h + SPECK_LEG + SPECK_R);
   return Math.hypot(p.x - cx, p.y - cy) < Math.max(SPECK_R * IC.Lo.U * 1.8, 26);
 }
+const asking = () => idle.say > 0 && idle.line === 0 && !!payUrl;
 function hubTap(p) {
-  if (idle.money > 0 && payUrl && inBox(p, helloBox, 8)) { window.open(payUrl, '_blank', 'noopener'); return; }
+  if (asking() && inBox(p, helloBox, 8)) { window.open(payUrl, '_blank', 'noopener'); return; }
   if (!onSpeck(p)) return;
-  idle.money = 5;
-  idle.pause = 5;                          // he stops to ask
+  idle.line = nextLine();
+  idle.say = SAY_T;
+  idle.pause = SAY_T;                      // stands still while he talks, then walks on
   if (idle.h === 0) idle.vh = 30;
   IC.tone(1568, 1568, 0.07, 'square', 0.03);
   IC.tone(2093, 2093, 0.2, 'triangle', 0.04, 0.07);
@@ -1146,7 +1168,7 @@ function update(dt) {
 function stepIdle(dt) {
   const L = IC.Lo, e = IC.ends(SPECK_R * 1.2);
   if (!idle.s) idle.s = L.LB + L.LA * 0.62;
-  if (idle.money > 0) idle.money -= dt;
+  if (idle.say > 0) idle.say -= dt;
   if (idle.pause > 0) idle.pause -= dt;
   else {
     idle.s += idle.dir * 9 * dt;
@@ -1161,7 +1183,7 @@ function stepIdle(dt) {
 // Speck says hello from the home screen, in a bubble beside his head.
 function drawHello(s, h) {
   const L = IC.Lo, U = L.U, fs = clamp(U * 2.1, 11, 17);
-  const ask = idle.money > 0, link = ask && !!payUrl, text = ask ? 'Give me $1,000 instead.' : 'Hi, I\'m sand.';
+  const link = asking(), text = idle.say > 0 ? LINES[idle.line] : 'Hi, I\'m sand.';
   ctx.save();
   ctx.font = `${link ? 700 : 600} ${fs}px ${FONT}`;
   const w = ctx.measureText(text).width + fs * 1.3, bh = fs * 1.9, tail = fs * 0.8, R = SPECK_R * U;
@@ -1173,6 +1195,8 @@ function drawHello(s, h) {
   let side = t[0] < 0 || (t[0] === 0 && t[1] < 0) ? -1 : 1;
   let c = place(side);
   if (!fits(c)) { side = -side; c = place(side); }
+  // too wide for either side (long line, narrow screen): keep it on screen
+  if (!fits(c)) c = [clamp(c[0], L.sx + w / 2 + 6, L.sx + L.sw - w / 2 - 6), clamp(c[1], L.sy + bh / 2 + 6, L.sy + L.sh - bh / 2 - 6)];
   const x0 = c[0] - w / 2, y0 = c[1] - bh / 2, rad = bh / 2;
   // tail starts inside the bubble so it meets the round end; one fill for both
   const tip = [bx + n[0] * R * 0.5 + t[0] * side * R * 1.2, by + n[1] * R * 0.5 + t[1] * side * R * 1.2], bw = fs * 0.42;
@@ -1270,7 +1294,7 @@ IC.boot = () => {
     return;
   }
   if (IC.SHOT) { if (IC.SHOT === 'icon') hub.classList.add('hidden'); still(); return; }
-  if (hook('tap')) { idle.money = 1e6; idle.pause = 1e6; }
+  if (hook('tap')) { idle.line = +hook('tap') || 0; idle.say = 1e6; idle.pause = 1e6; }
 
   let last = performance.now(), acc = 0;
   function frame(now) {

@@ -52,7 +52,7 @@
   #apps { position: fixed; display: grid; justify-items: center; align-content: center; row-gap: 14px; }
   .app { background: none; border: 0; padding: 4px; display: flex; flex-direction: column; align-items: center; gap: 6px; border-radius: 18px; -webkit-backdrop-filter: none; backdrop-filter: none; }
   .app img { width: var(--icon); height: var(--icon); border-radius: 22.5%; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); display: block; }
-  .app span { font-size: clamp(10.5px, calc(var(--icon) * .19), 13.5px); font-weight: 500; text-shadow: 0 1px 6px rgba(0, 0, 0, .6); white-space: nowrap; }
+  .app span { font-size: clamp(10.5px, calc(var(--icon) * .19), 13.5px); font-weight: 500; text-shadow: 0 1px 6px rgba(0, 0, 0, .6); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .app:active img { filter: brightness(.75); transform: scale(.96); }
   #brand {
     --k: 1; position: fixed; display: flex; flex-direction: column; justify-content: center; align-items: center;
@@ -150,13 +150,13 @@
 <div id="hud" class="hidden"><button id="b-home" class="pill">Home</button><div class="hud-text"><span id="hud-main"></span><span id="hud-sub"></span></div></div>
 <div id="panel" class="hidden"><div class="card" id="card"></div></div>
 <!-- home screen order -->
-<script src="js/core.js?v=8"></script>
-<script src="js/blocks.js?v=8"></script>
-<script src="js/walk.js?v=8"></script>
-<script src="js/hangman.js?v=8"></script>
-<script src="js/pinball.js?v=8"></script>
-<script src="js/metro.js?v=8"></script>
-<script src="js/buzz.js?v=8"></script>
+<script src="js/core.js?v=9"></script>
+<script src="js/blocks.js?v=9"></script>
+<script src="js/walk.js?v=9"></script>
+<script src="js/hangman.js?v=9"></script>
+<script src="js/pinball.js?v=9"></script>
+<script src="js/metro.js?v=9"></script>
+<script src="js/buzz.js?v=9"></script>
 <script>IC.boot();</script>
 </body>
 </html>
