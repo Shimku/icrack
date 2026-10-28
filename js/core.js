@@ -1121,11 +1121,6 @@ const LINES = [
   'Give me $1,000 instead.',
   'iCrack or Green Line of Death?',
   'Makes you miss the Bendgate.',
-  'You\'re holding it wrong.',
-  'It\'s a feature.',
-  'A small number of units, they said.',
-  'Not with your nails!',
-  'I\'m coarse and I get everywhere.',
 ];
 const SAY_T = 4;
 const idle = { s: 0, dir: 1, h: 0, vh: 0, pause: 1, walk: 0, say: 0, line: -1, bag: [] };
