@@ -34,7 +34,7 @@ const TABLES = {
   beach: {
     name: 'Beach', word: 'SUN', drain: 'Washed out.', display: 'BEACH', light: true,
     rail: 'rgba(255,255,255,0.9)', post: '#ffffff', sling: 'rgba(255,99,71,0.35)', slingEdge: '#ff6347',
-    flip: '#ffffff', flipEdge: '#ff6347', lane: 'rgba(255,255,255,0.55)', laneLit: '#ffd60a', text: '#3b2408',
+    flip: '#ffffff', flipEdge: '#ff6347', lane: 'rgba(255,255,255,0.85)', laneLit: '#ffd60a', text: '#3b2408',
     disp: { bg: 'rgba(6,58,84,0.95)', edge: 'rgba(255,255,255,0.3)', fg: '#ffe08a', fg2: '#ffffff' },
     apron: ['rgba(214,170,104,0.96)', 'rgba(190,146,84,0.98)'],
   },
@@ -76,7 +76,9 @@ function build() {
     }
   };
   // outline: left wall, rounded top corners, the wing's right wall down to the line
-  const cr = Math.min(cw, colH) * 0.2, cr2 = Math.max(laneW * 1.8, Math.min(ww, wh) * 0.22);
+  // each table has its own corner: square for the store, round for the beach
+  const crK = { neon: 0.2, genius: 0.1, bench: 0.14, beach: 0.3 }[tbId];
+  const cr = Math.min(cw, colH) * crK, cr2 = Math.max(laneW * 1.8, Math.min(ww, wh) * 0.22);
   const yG = py - 0.34 * lw;
   seg([left, bot + 60], [left, top + cr]);
   arc(left + cr, top + cr, cr, Math.PI, Math.PI * 1.5, 8);
@@ -109,33 +111,66 @@ function build() {
     return [tTop, tBot, tTip];
   };
   const slings = [sling(1), sling(-1)];
-  // top lanes, near the top of the left column, below the Home button and score
-  const cx = left + cw / 2, lane = Math.min(cw, colH * 0.7) * 0.22, ly = top + Math.max(cr * 0.55, 3 * rb, 46), lh = 3.2 * rb;
+  // top lanes, near the top of the left column, below the Home button and score.
+  // Neon and Beach have them in the middle, the Genius Bar towards the hinge,
+  // the Teardown bench towards the left wall.
+  const lane = Math.min(cw, colH * 0.7) * 0.22, ly = top + Math.max(cr * 0.55, 3 * rb, 46), lh = 3.2 * rb;
+  const arcX = (y) => (y < top + cr ? left + cr - Math.sqrt(Math.max(0, cr * cr - (top + cr - y) ** 2)) : left);
+  const cxMin = arcX(ly) + rb * 2.6 + 1.5 * lane, cxMax = J[0] - rb * 2.6 - 1.5 * lane;
+  const cx = clamp(left + cw * { neon: 0.5, genius: 0.68, bench: 0.3, beach: 0.5 }[tbId], cxMin, Math.max(cxMin, cxMax));
   const lanes = [-1, 0, 1].map((i) => ({ x: cx + i * lane, y: ly + lh * 0.55, lit: false, ch: TB.word[i + 1] }));
   for (const i of [-1.5, -0.5, 0.5, 1.5]) seg([cx + i * lane, ly], [cx + i * lane, ly + lh], 'post', { e: 0.4 });
-  // bumpers: three in the column, two in the wing
+  // bumpers in the column, over the flippers so none sit above the apron
   const br = clamp(Math.min(cw, colH) * 0.085, rb * 1.6, rb * 3.4);
   const upTop = ly + lh + br * 1.6, upBot = Math.min(py - 0.64 * lw - br, J[1] + (bot - J[1]) * 0.15);
-  const midY = (upTop + upBot) / 2;
-  // over the flippers, so none sit above the apron
+  const midY = (upTop + upBot) / 2, hgt = upBot - upTop;
   const bx = xl + lw / 2, bs = Math.min(lane * 1.05, lw * 0.3);
-  // a triangle of three when there's height for it, otherwise two side by side
-  const bumpers = upBot - upTop >= br * 2.6
-    ? [
-      { x: bx - bs, y: upTop + (upBot - upTop) * 0.2, r: br },
-      { x: bx + bs, y: upTop + (upBot - upTop) * 0.2, r: br },
-      { x: bx, y: Math.min(upBot, Math.max(midY, upTop + br * 2.6)), r: br },
-    ]
-    : [
-      { x: bx - bs, y: Math.min(midY, upBot), r: br },
-      { x: bx + bs, y: Math.min(midY, upBot), r: br },
-    ];
+  let bumpers;
+  let chip = null;
+  if (tbId === 'genius') {
+    // rows of store tables: a 2 by 2 grid, or one row of three on a short column
+    const r = br * 0.78;
+    if (hgt >= br * 2.4) {
+      const y1 = upTop + hgt * 0.1, y2 = Math.min(upBot, y1 + Math.max(r * 3, hgt * 0.6));
+      bumpers = [[-1, y1], [1, y1], [-1, y2], [1, y2]].map(([sx, y]) => ({ x: bx + sx * bs * 1.1, y, r }));
+    } else bumpers = [-1, 0, 1].map((sx) => ({ x: bx + sx * bs * 1.2, y: midY, r: r * 0.9 }));
+  } else if (tbId === 'bench') {
+    // five screws in a closed ring round a chip, like the ones holding a part
+    // down: the gaps are narrower than the ball, so it can't get stuck inside
+    const r = Math.min(br * 0.62, bs * 0.5), R = (2 * r + 1.6 * rb) / (2 * Math.sin(Math.PI / 5));
+    // over the left flipper, not the gap, so what it kicks down lands on a flipper
+    const cy = clamp(midY, upTop + R * 0.5, upBot), rx = clamp(bx - bs * 0.6, xl + R + r, xr - R - r);
+    bumpers = [0, 1, 2, 3, 4].map((k) => { const a = -Math.PI / 2 + (k * Math.PI * 2) / 5; return { x: rx + Math.cos(a) * R, y: cy + Math.sin(a) * R, r }; });
+    chip = { x: rx, y: cy, s: Math.max(rb, R - r) * 0.9 };
+  } else if (tbId === 'beach') {
+    // one small ball high and two big ones low and wide, or two big ones on a slant
+    bumpers = hgt >= br * 2.6
+      ? [{ x: bx, y: upTop + hgt * 0.08, r: br * 0.72 }, { x: bx - bs * 1.25, y: upBot - br * 0.1, r: br * 1.1 }, { x: bx + bs * 1.25, y: upBot - br * 0.1, r: br * 1.1 }]
+      : [{ x: bx - bs * 1.15, y: upTop - br * 0.2, r: br }, { x: bx + bs * 1.15, y: upBot + br * 0.2, r: br }];
+  } else {
+    // a triangle of three when there's height for it, otherwise two side by side
+    bumpers = hgt >= br * 2.6
+      ? [
+        { x: bx - bs, y: upTop + hgt * 0.2, r: br },
+        { x: bx + bs, y: upTop + hgt * 0.2, r: br },
+        { x: bx, y: Math.min(upBot, Math.max(midY, upTop + br * 2.6)), r: br },
+      ]
+      : [
+        { x: bx - bs, y: Math.min(midY, upBot), r: br },
+        { x: bx + bs, y: Math.min(midY, upBot), r: br },
+      ];
+  }
+  // nothing in the column pokes past the flippers' edges, the hinge wall included
+  for (const k of bumpers) k.x = clamp(k.x, xl + k.r, xr - k.r);
+  // the wing, right of the hinge: high up, above where the trampoline throws the
+  // ball, so they feed it back out instead of keeping it up there
   const wingW = ww - laneW;
   if (wingW > br * 4 && wh > br * 5) {
-    const wr = clamp(Math.min(wingW, wh) * 0.09, rb * 1.6, br);
-    // high in the wing, above where the trampoline throws the ball, so they feed it back
-    // out instead of keeping it up there
-    bumpers.push({ x: J[0] + wingW * 0.36, y: top + wh * 0.34, r: wr }, { x: J[0] + wingW * 0.7, y: top + wh * 0.2, r: wr });
+    const wr = clamp(Math.min(wingW, wh) * 0.09, rb * 1.6, br), at = (fx, fy, r = wr) => ({ x: J[0] + wingW * fx, y: top + wh * fy, r });
+    if (tbId === 'genius') bumpers.push(at(0.8, 0.26));                       // the quotes take the middle
+    else if (tbId === 'bench') bumpers.push(at(0.28, 0.42, wr * 0.75), at(0.5, 0.42, wr * 0.75), at(0.72, 0.42, wr * 0.75));
+    else if (tbId === 'beach') bumpers.push(at(0.5, 0.36, wr * 1.25));
+    else bumpers.push(at(0.36, 0.34), at(0.7, 0.2));
   }
   bumpers.forEach((b, i) => { b.flash = 0; b.rot = i * 1.3; b.color = ['#ff375f', '#0a84ff', '#ffd60a', '#30d158', '#bf5af2'][i % 5]; });
 
@@ -162,7 +197,7 @@ function build() {
   }
   T = {
     left, right, top, bot, J, cw, colH, ww, wh, lw, rb, laneW, fl, py, g, V, segs, slings, lanes, bumpers, lh, ly, apron,
-    targets, targetsUp: 0, spin, crab,
+    targets, targetsUp: 0, spin, crab, chip,
     flips: [
       { p: pL, side: 1, a: FL_REST, w: 0, rest: FL_REST, up: -FL_UP },
       { p: pR, side: -1, a: Math.PI - FL_REST, w: 0, rest: Math.PI - FL_REST, up: Math.PI + FL_UP },
@@ -182,7 +217,7 @@ function serve(st) {
   st.b = { x: T.plungeAt[0], y: T.plungeAt[1], vx: 0, vy: 0, lane: true };
   st.plunge = 0;
   st.saved = false;
-  st.noFlip = 0;
+  st.noFlip = 0; st.shelfRun = 0;
 }
 function add(st, pts) { st.score += pts * st.mult; }
 
@@ -215,10 +250,12 @@ function collideSeg(st, b, s) {
   const vn = b.vx * nx + b.vy * ny;
   if (vn >= 0) return;
   if (s.kind === 'shelf' && ny < 0) {
-    // trampoline: always throws the ball back up, nudged towards the hinge
-    // each bounce carries it about one wing-height back towards the hinge
+    // trampoline: always throws the ball back up, nudged towards the hinge.
+    // Each bounce in a row without a flipper throws it a bit further, so a
+    // bumper by the hinge can't keep passing it back
+    st.shelfRun = (st.shelfRun || 0) + 1;
     b.vy = -Math.max(Math.abs(b.vy) * 0.85, T.shelfMin);
-    b.vx = Math.min(b.vx * 0.3, 0) - T.shelfMin * 0.5;
+    b.vx = Math.min(b.vx * 0.3, 0) - T.shelfMin * (0.5 + 0.14 * Math.min(st.shelfRun - 1, 6));
     add(st, 25);
     st.shelfFlash = 0.35;
     IC.tone(380, 760, 0.07, 'triangle', 0.035);
@@ -270,7 +307,7 @@ function collideFlipper(st, b, f) {
   const rvx = b.vx - fvx, rvy = b.vy - fvy;
   const vn = rvx * nx + rvy * ny;
   if (vn >= 0) return;
-  st.noFlip = 0;
+  st.noFlip = 0; st.shelfRun = 0;
   const e = 0.25;
   b.vx = rvx - (1 + e) * vn * nx + fvx;
   b.vy = rvy - (1 + e) * vn * ny + fvy;
@@ -366,6 +403,13 @@ function physics(st, dt) {
     const cx = (T.flips[0].p[0] + T.flips[1].p[0]) / 2;
     b.vx = Math.sign(cx - b.x) * T.V * 0.15; b.vy = T.V * 0.3;
     st.anchor = null;
+    st.msg = { text: 'Nudge', t: 0.8 };
+  }
+  // twenty seconds without reaching a flipper: the table is looping it, so nudge it down
+  if (st.noFlip > 20) {
+    const cx = (T.flips[0].p[0] + T.flips[1].p[0]) / 2;
+    b.vx = Math.sign(cx - b.x) * T.V * 0.2; b.vy = T.V * 0.35;
+    st.noFlip = 0; st.loopNudges = (st.loopNudges || 0) + 1;
     st.msg = { text: 'Nudge', t: 0.8 };
   }
   // drained
@@ -691,7 +735,22 @@ function drawTable() {
   for (const s of T.segs) if (s.kind === 'sling') rail(s.a, s.b, Math.max(2.5, rb * 0.5), s.flash > 0 ? '#ffffff' : TB.slingEdge);
   // lanes
   for (const ln of T.lanes) {
-    IC.text(ln.ch, ln.x, ln.y + T.lh * 0.15, clamp(rb * 1.5, 10, 20), { weight: 800, color: ln.lit ? TB.laneLit : TB.lane, shadow: ln.lit && !TB.light });
+    IC.text(ln.ch, ln.x, ln.y + T.lh * 0.15, clamp(rb * 1.5, 10, 20), { weight: 800, color: ln.lit ? TB.laneLit : TB.lane, shadow: tbId === 'beach' || (ln.lit && !TB.light) });
+  }
+  if (T.chip) {
+    // the part the screws hold down
+    const c = T.chip;
+    ctx.save();
+    IC.rrect(ctx, c.x - c.s / 2, c.y - c.s / 2, c.s, c.s, c.s * 0.12);
+    ctx.fillStyle = '#1c1f26'; ctx.fill();
+    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,214,10,0.8)';
+    for (let i = 0; i < 4; i++) for (const sd of [-1, 1]) {
+      const t = (i + 0.5) / 4 - 0.5;
+      ctx.fillRect(c.x + t * c.s - 1, c.y + sd * c.s * 0.5 - (sd > 0 ? 0 : 3), 2, 3);
+      ctx.fillRect(c.x + sd * c.s * 0.5 - (sd > 0 ? 0 : 3), c.y + t * c.s - 1, 3, 2);
+    }
+    ctx.restore();
   }
   for (const k of T.bumpers) drawBumper(k);
   if (T.targets.length) drawTargets();
@@ -775,7 +834,7 @@ function selftest(n) {
   for (const id of ORDER) {
     pick(id);
     build();
-    let balls = 0, time = 0, hits = 0, maxSpeed = 0, escapes = 0, drops = 0, quotes = 0, spins = 0, pinches = 0, long = 0, trapped = 0;
+    let balls = 0, time = 0, hits = 0, maxSpeed = 0, escapes = 0, drops = 0, quotes = 0, spins = 0, pinches = 0, long = 0, trapped = 0, loops = 0, where = null;
     for (let gm = 0; gm < n; gm++) {
       const st = fresh();
       serve(st);
@@ -791,17 +850,23 @@ function selftest(n) {
           if (b.x < T.left - T.rb || b.x > T.right + T.rb || b.y < T.top - T.rb) { escapes++; b.lane = true; }
           if (b.x > T.J[0] + T.rb && b.y > T.J[1] + T.rb && b.y < T.bot) { escapes++; b.lane = true; }
           if (st.noFlip > 60) { trapped++; break; }
+          // while a loop is building up, note where the ball spends its time
+          if (st.noFlip > 12 && !where) where = { wing: 0, n: 0, y: 0, x: 0 };
+          if (where && where.n < 2000 && st.noFlip > 12) { where.n++; if (b.x > T.J[0] && b.y < T.J[1]) where.wing++; where.x += (b.x - T.left) / (T.right - T.left); where.y += (b.y - T.top) / (T.bot - T.top); }
         }
       }
+      loops += st.loopNudges || 0;
       balls += st.ball; time += t; hits += st.hits; drops += st.drops; quotes += st.quotes; spins += st.spins; pinches += st.pinches;
       if (t >= 900) long++;
     }
     if (escapes) problems.push(`${id}: ${escapes} escapes`);
     if (trapped) problems.push(`${id}: ball trapped away from the flippers ${trapped} times`);
+    if (loops > n / 2) problems.push(`${id}: ${loops} loop nudges in ${n} games`);
     if (id === 'genius' && T.targets.length && !drops) problems.push('genius: no quote ever hit');
     if (id === 'bench' && !spins) problems.push('bench: the spudger never spun');
     if (id === 'beach' && T.crab && !pinches) problems.push('beach: the crab never got hit');
-    out[id] = { long, ballSec: +(time / balls).toFixed(1), hits: +(hits / n).toFixed(0), maxV: +maxSpeed.toFixed(2), drops, quotes, spins, pinches, targets: T.targets.length, crab: !!T.crab, spinner: !!T.spin };
+    if (where && where.n) where = { wing: +(where.wing / where.n).toFixed(2), x: +(where.x / where.n).toFixed(2), y: +(where.y / where.n).toFixed(2) };
+    out[id] = { loops, where, long, ballSec: +(time / balls).toFixed(1), hits: +(hits / n).toFixed(0), maxV: +maxSpeed.toFixed(2), drops, quotes, spins, pinches, targets: T.targets.length, crab: !!T.crab, spinner: !!T.spin };
   }
   pick(keep);
   build();
